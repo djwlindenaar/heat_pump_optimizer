@@ -1,0 +1,9 @@
+{
+  "domain": "heat_pump_optimizer",
+  "name": "Heat Pump Cost Optimizer",
+  "codeowners": [],
+  "config_flow": true,
+  "documentation": "https://github.com/local/heat_pump_optimizer",
+  "iot_class": "calculated",
+  "version": "0.1.0"
+}
