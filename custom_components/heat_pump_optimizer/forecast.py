@@ -6,14 +6,25 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from .optimizer import ForecastPoint
 
+import logging
+
+_LOGGER = logging.getLogger(__name__)
 
 def _dt(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
+def _hour_key(value: str) -> int:
+    dt = (
+        _dt(value)
+        .astimezone()
+        .replace(
+            minute=0,
+            second=0,
+            microsecond=0,
+        )
+    )
 
-def _hour_key(value: str) -> str:
-    return _dt(value).astimezone().replace(minute=0,second=0,microsecond=0).isoformat()
-
+    return int(dt.timestamp())
 
 def _extract_prices(state) -> dict[str,float]:
     attrs=state.attributes
@@ -42,11 +53,16 @@ async def async_build_forecast(hass: HomeAssistant, heating_entity: str, isolate
         {"entity_id":heating_entity,"days":days,"isolate_sensor":isolate_sensor,"human_readable":False},
         blocking=True, return_response=True,
     )
-    heat_rows=(response or {}).get("forecast",[])
+    heat_rows = (
+        response
+        .get("forecast", [])
+    )
+
     price_state=hass.states.get(nordpool_entity)
     if price_state is None: raise HomeAssistantError(f"Nordpool entity not found: {nordpool_entity}")
     prices=_extract_prices(price_state)
     points=[]
+
     for row in heat_rows:
         key=_hour_key(row["datetime"])
         if key not in prices: continue
