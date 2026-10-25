@@ -25,7 +25,7 @@ def _extract_prices(state) -> dict[str,float]:
         start=row.get("start") or row.get("start_time")
         value=row.get("value")
         if start is not None and value is not None:
-            result[_hour_key(start)]=float(value)
+            result[_hour_key(str(start))]=float(value)
     # Some Nordpool versions expose a list under today/tomorrow without timestamps.
     if not result:
         for key in ("today","tomorrow"):
