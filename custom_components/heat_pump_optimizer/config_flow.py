@@ -178,22 +178,7 @@ class HeatPumpOptimizerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> config_entries.OptionsFlow:
         return HeatPumpOptimizerOptionsFlow(config_entry)
 
-    async def async_migrate_entry(
-        self,
-        hass,
-        config_entry: config_entries.ConfigEntry,
-    ) -> bool:
-        if config_entry.version == 1:
-            data = dict(config_entry.data)
-            legacy_entity = data.pop(CONF_NORDPOOL_ENTITY, "")
-            data.setdefault(CONF_NORDPOOL_BUY_ENTITY, legacy_entity)
-            data.setdefault(CONF_NORDPOOL_FEED_IN_ENTITY, legacy_entity)
-            hass.config_entries.async_update_entry(
-                config_entry,
-                data=data,
-                version=2,
-            )
-        return True
+
 
 
 class HeatPumpOptimizerOptionsFlow(config_entries.OptionsFlow):
