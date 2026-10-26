@@ -134,8 +134,7 @@ def _validate_options(values: dict[str, Any]) -> dict[str, str]:
 
 
 class HeatPumpOptimizerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    VERSION = 2
-    MINOR_VERSION = 0
+    VERSION = 1
 
     async def async_step_user(
         self,
