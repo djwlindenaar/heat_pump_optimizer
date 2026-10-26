@@ -1,32 +1,39 @@
 """Read Heating Analytics and Nordpool forecasts from Home Assistant."""
 from __future__ import annotations
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.util import dt as dt_util
 from .optimizer import ForecastPoint
-
 import logging
-
 _LOGGER = logging.getLogger(__name__)
 
-def _dt(value: str) -> datetime:
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+def _as_datetime(value: Any) -> datetime:
+    """Return a timezone-aware datetime, preserving native datetime inputs."""
+    if isinstance(value, datetime):
+        result = value
+    elif isinstance(value, str):
+        result = dt_util.parse_datetime(value)
+        if result is None:
+            raise ValueError(f"Cannot parse datetime: {value!r}")
+    else:
+        raise TypeError(f"Unsupported datetime type: {type(value).__name__}")
 
-def _hour_key(value: str) -> int:
-    dt = (
-        _dt(value)
-        .astimezone()
-        .replace(
-            minute=0,
-            second=0,
-            microsecond=0,
-        )
+    if result.tzinfo is None:
+        result = result.replace(tzinfo=dt_util.DEFAULT_TIME_ZONE)
+
+    return result
+
+def _hour_key(value: Any) -> datetime:
+    """Normalize a datetime-like value to an exact UTC hour."""
+    return _as_datetime(value).astimezone(timezone.utc).replace(
+        minute=0,
+        second=0,
+        microsecond=0,
     )
 
-    return int(dt.timestamp())
-
-def _extract_prices(state) -> dict[str,float]:
+def _extract_prices(state) -> dict[datetime,float]:
     attrs=state.attributes
     rows=[]
     for key in ("raw_today","raw_tomorrow"):
@@ -36,7 +43,7 @@ def _extract_prices(state) -> dict[str,float]:
         start=row.get("start") or row.get("start_time")
         value=row.get("value")
         if start is not None and value is not None:
-            result[_hour_key(str(start))]=float(value)
+            result[_hour_key(start)]=float(value)
     # Some Nordpool versions expose a list under today/tomorrow without timestamps.
     if not result:
         for key in ("today","tomorrow"):
@@ -44,8 +51,6 @@ def _extract_prices(state) -> dict[str,float]:
             # No safe timestamp reconstruction here; fail with a useful message.
             if values: raise HomeAssistantError("Nordpool entity must expose raw_today/raw_tomorrow with start and value fields")
     return result
-
-
 async def async_build_forecast(hass: HomeAssistant, heating_entity: str, isolate_sensor: str,
                                nordpool_entity: str, days: int) -> list[ForecastPoint]:
     response=await hass.services.async_call(
@@ -57,12 +62,10 @@ async def async_build_forecast(hass: HomeAssistant, heating_entity: str, isolate
         response
         .get("forecast", [])
     )
-
     price_state=hass.states.get(nordpool_entity)
     if price_state is None: raise HomeAssistantError(f"Nordpool entity not found: {nordpool_entity}")
     prices=_extract_prices(price_state)
     points=[]
-
     for row in heat_rows:
         key=_hour_key(row["datetime"])
         if key not in prices: continue

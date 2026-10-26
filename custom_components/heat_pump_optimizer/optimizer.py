@@ -1,23 +1,19 @@
 """Discrete dynamic-programming optimizer for slab thermal storage."""
 from __future__ import annotations
 from dataclasses import dataclass
+from datetime import datetime
 import math
 from .cop_model import COPModel
-
 @dataclass(frozen=True)
 class ForecastPoint:
-    timestamp: str
+    timestamp: datetime
     heat_demand_kwh: float
     outdoor_c: float
     buy_price: float
     sell_price: float
     pv_kwh: float = 0.0
-
-
 def _q(value: float, step: float) -> int:
     return int(round(value / step))
-
-
 def optimize(points: list[ForecastPoint], cop: COPModel, *, power_levels_w: list[int],
              slab_min_kwh: float, slab_max_kwh: float, initial_slab_kwh: float,
              terminal_reserve_kwh: float, state_step_kwh: float,
