@@ -1,31 +1,58 @@
 {
-    "title":"Heat Pump Cost Optimizer",
-        "config":{
-            "abort":{
-                    "reconfigure_successful": "Configuration updated."
-            },
-            "step":{
-                "reconfigure":{
-                    "title": "Reconfigure Heat Pump Optimizer"
-                },
-                "user":{
-                    "title":"Configure optimizer",
-                    "description":"Select Heating Analytics and Nordpool entities and thermal-storage limits.",
-                    "data":{
-                        "heating_analytics_entity":"Heating Analytics entity",
-                        "isolate_sensor":"Heat-pump energy sensor",
-                        "nordpool_entity":"Nordpool entity",
-                        "horizon_hours":"Optimization horizon (hours)",
-                        "update_minutes":"Update interval (minutes)",
-                        "slab_min_kwh":"Minimum slab energy (kWh relative)",
-                        "slab_max_kwh":"Maximum slab energy (kWh relative)",
-                        "initial_slab_kwh":"Initial slab energy (kWh relative)",
-                        "terminal_reserve_kwh":"Terminal reserve (kWh)",
-                        "power_levels_w":"Allowed electrical powers (comma-separated W)",
-                        "startup_cost_eur":"Cost penalty per start (EUR)",
-                        "cop_correction_curve":"COP power correction,power:factor pairs"
-                    }
-                }
-            }
+  "title": "Heat Pump Cost Optimizer",
+  "config": {
+    "abort": {
+      "already_configured": "Heat Pump Cost Optimizer is already configured.",
+      "reconfigure_successful": "Configuration updated."
+    },
+    "step": {
+      "user": {
+        "title": "Configure optimizer connections",
+        "description": "Select the Heating Analytics forecast, heat-pump energy, buying-price, and feed-in-price entities.",
+        "data": {
+          "heating_analytics_entity": "Heating Analytics entity",
+          "isolate_sensor": "Heat-pump energy sensor",
+          "nordpool_buy_entity": "Nordpool buying-price entity",
+          "nordpool_feed_in_entity": "Nordpool feed-in-price entity"
         }
+      },
+      "reconfigure": {
+        "title": "Reconfigure optimizer connections",
+        "description": "Change the source entities. Optimization parameters remain available under Configure.",
+        "data": {
+          "heating_analytics_entity": "Heating Analytics entity",
+          "isolate_sensor": "Heat-pump energy sensor",
+          "nordpool_buy_entity": "Nordpool buying-price entity",
+          "nordpool_feed_in_entity": "Nordpool feed-in-price entity"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Optimizer options",
+        "description": "Tune the optimization horizon, refresh rate, slab model, allowed powers, and COP correction.",
+        "data": {
+          "horizon_hours": "Optimization horizon (hours)",
+          "update_minutes": "Update interval (minutes)",
+          "slab_min_kwh": "Minimum slab energy (kWh relative)",
+          "slab_max_kwh": "Maximum slab energy (kWh relative)",
+          "initial_slab_kwh": "Initial slab energy (kWh relative)",
+          "terminal_reserve_kwh": "Terminal reserve (kWh)",
+          "power_levels_w": "Allowed electrical powers (comma-separated W)",
+          "startup_cost_eur": "Cost penalty per start (EUR)",
+          "state_step_kwh": "Slab-state calculation step (kWh)",
+          "cop_correction_curve": "COP correction curve (power:factor pairs)"
+        }
+      }
+    },
+    "error": {
+      "slab_max_not_above_min": "Maximum slab energy must be greater than minimum slab energy.",
+      "initial_slab_out_of_range": "Initial slab energy must be between the minimum and maximum.",
+      "terminal_reserve_out_of_range": "Terminal reserve must be between the minimum and maximum.",
+      "invalid_power_levels": "Enter non-negative whole-number power levels separated by commas.",
+      "invalid_cop_curve": "Enter at least two positive power:factor pairs separated by commas."
+    }
+  }
 }

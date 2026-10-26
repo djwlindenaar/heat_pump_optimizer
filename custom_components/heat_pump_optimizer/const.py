@@ -3,6 +3,9 @@ PLATFORMS = ["sensor", "button"]
 
 CONF_HEATING_ANALYTICS_ENTITY = "heating_analytics_entity"
 CONF_ISOLATE_SENSOR = "isolate_sensor"
+CONF_NORDPOOL_BUY_ENTITY = "nordpool_buy_entity"
+CONF_NORDPOOL_FEED_IN_ENTITY = "nordpool_feed_in_entity"
+# Legacy key retained so existing entries can be migrated/fallback-loaded.
 CONF_NORDPOOL_ENTITY = "nordpool_entity"
 CONF_CONTROL_ENTITY = "control_entity"
 CONF_HORIZON_HOURS = "horizon_hours"

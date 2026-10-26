@@ -1,38 +1,76 @@
 from __future__ import annotations
+
 from datetime import timedelta
 import logging
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+
 from .const import *
 from .cop_model import COPModel
 from .forecast import async_build_forecast
 from .optimizer import optimize
-_LOGGER=logging.getLogger(__name__)
+
+_LOGGER = logging.getLogger(__name__)
+
 
 class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
-    def __init__(self,hass:HomeAssistant,entry:ConfigEntry):
-        self.entry=entry; opts={**DEFAULTS,**entry.data,**entry.options}
-        self.opts=opts
-        super().__init__(hass,_LOGGER,name=DOMAIN,config_entry=entry,
-                         update_interval=timedelta(minutes=int(opts[CONF_UPDATE_MINUTES])))
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry):
+        self.entry = entry
+        opts = {**DEFAULTS, **entry.data, **entry.options}
+        legacy_entity = opts.get(CONF_NORDPOOL_ENTITY, "")
+        opts.setdefault(CONF_NORDPOOL_BUY_ENTITY, legacy_entity)
+        opts.setdefault(CONF_NORDPOOL_FEED_IN_ENTITY, legacy_entity)
+        self.opts = opts
+        super().__init__(
+            hass,
+            _LOGGER,
+            name=DOMAIN,
+            config_entry=entry,
+            update_interval=timedelta(minutes=int(opts[CONF_UPDATE_MINUTES])),
+        )
 
     async def _async_update_data(self):
         try:
-            horizon=int(self.opts[CONF_HORIZON_HOURS]); days=max(1,(horizon+23)//24)
-            points=await async_build_forecast(self.hass,self.opts[CONF_HEATING_ANALYTICS_ENTITY],
-                self.opts[CONF_ISOLATE_SENSOR],self.opts[CONF_NORDPOOL_ENTITY],days)
-            points=points[:horizon]
-            levels=[int(v.strip()) for v in str(self.opts[CONF_POWER_LEVELS]).split(",")]
-            model=COPModel(str(self.opts[CONF_COP_CORRECTION]))
-            schedule=await self.hass.async_add_executor_job(lambda: optimize(points,model,
-                power_levels_w=levels,slab_min_kwh=float(self.opts[CONF_SLAB_MIN]),
-                slab_max_kwh=float(self.opts[CONF_SLAB_MAX]),initial_slab_kwh=float(self.opts[CONF_INITIAL_SLAB]),
-                terminal_reserve_kwh=float(self.opts[CONF_TERMINAL_RESERVE]),
-                state_step_kwh=float(self.opts[CONF_STATE_STEP]),startup_cost_eur=float(self.opts[CONF_STARTUP_COST])))
-            first=schedule[0]
-            return {"target_power_w":first["target_electrical_power_w"],"current":first,
-                    "schedule":schedule,"total_cost_eur":round(sum(x["interval_cost_eur"] for x in schedule),4),
-                    "forecast_hours":len(schedule)}
+            horizon = int(self.opts[CONF_HORIZON_HOURS])
+            days = max(1, (horizon + 23) // 24)
+            points = await async_build_forecast(
+                self.hass,
+                self.opts[CONF_HEATING_ANALYTICS_ENTITY],
+                self.opts[CONF_ISOLATE_SENSOR],
+                self.opts[CONF_NORDPOOL_BUY_ENTITY],
+                self.opts[CONF_NORDPOOL_FEED_IN_ENTITY],
+                days,
+            )
+            points = points[:horizon]
+            levels = [
+                int(value.strip())
+                for value in str(self.opts[CONF_POWER_LEVELS]).split(",")
+            ]
+            model = COPModel(str(self.opts[CONF_COP_CORRECTION]))
+            schedule = await self.hass.async_add_executor_job(
+                lambda: optimize(
+                    points,
+                    model,
+                    power_levels_w=levels,
+                    slab_min_kwh=float(self.opts[CONF_SLAB_MIN]),
+                    slab_max_kwh=float(self.opts[CONF_SLAB_MAX]),
+                    initial_slab_kwh=float(self.opts[CONF_INITIAL_SLAB]),
+                    terminal_reserve_kwh=float(self.opts[CONF_TERMINAL_RESERVE]),
+                    state_step_kwh=float(self.opts[CONF_STATE_STEP]),
+                    startup_cost_eur=float(self.opts[CONF_STARTUP_COST]),
+                )
+            )
+            first = schedule[0]
+            return {
+                "target_power_w": first["target_electrical_power_w"],
+                "current": first,
+                "schedule": schedule,
+                "total_cost_eur": round(
+                    sum(row["interval_cost_eur"] for row in schedule), 4
+                ),
+                "forecast_hours": len(schedule),
+            }
         except Exception as err:
             raise UpdateFailed(str(err)) from err
