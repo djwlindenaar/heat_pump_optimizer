@@ -1,9 +1,7 @@
 from homeassistant.components.sensor import SensorEntity,SensorDeviceClass
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from .const import DOMAIN
 async def async_setup_entry(hass,entry,async_add_entities):
-    c=entry.runtime_data
-    async_add_entities([TargetPowerSensor(c,entry),ScheduleSensor(c,entry),CostSensor(c,entry)])
+    c=entry.runtime_data; async_add_entities([TargetPowerSensor(c,entry),ScheduleSensor(c,entry),CostSensor(c,entry)])
 class Base(CoordinatorEntity,SensorEntity):
     _attr_has_entity_name=True
     def __init__(self,c,e): super().__init__(c); self._entry=e
@@ -22,7 +20,7 @@ class ScheduleSensor(Base):
     @property
     def native_value(self): return self.coordinator.data["forecast_hours"]
     @property
-    def extra_state_attributes(self): return {"schedule":self.coordinator.data["schedule"]}
+    def extra_state_attributes(self): return {"schedule":self.coordinator.data["schedule"],"forecast_intervals":self.coordinator.data["forecast_intervals"]}
 class CostSensor(Base):
     _attr_name="Forecast optimized cost"; _attr_native_unit_of_measurement="EUR"
     @property

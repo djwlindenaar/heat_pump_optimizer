@@ -2,8 +2,11 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
-import math
 from .cop_model import COPModel
+
+INTERVAL_MINUTES = 15
+INTERVAL_HOURS = INTERVAL_MINUTES / 60.0
+
 @dataclass(frozen=True)
 class ForecastPoint:
     timestamp: datetime
@@ -12,8 +15,10 @@ class ForecastPoint:
     buy_price: float
     sell_price: float
     pv_kwh: float = 0.0
+
 def _q(value: float, step: float) -> int:
     return int(round(value / step))
+
 def optimize(points: list[ForecastPoint], cop: COPModel, *, power_levels_w: list[int],
              slab_min_kwh: float, slab_max_kwh: float, initial_slab_kwh: float,
              terminal_reserve_kwh: float, state_step_kwh: float,
@@ -28,7 +33,7 @@ def optimize(points: list[ForecastPoint], cop: COPModel, *, power_levels_w: list
             soc=soc_q*state_step_kwh
             for power_w in power_levels_w:
                 on=power_w>0
-                elec_kwh=power_w/1000.0
+                elec_kwh=(power_w/1000.0)*INTERVAL_HOURS
                 cop_v=cop.predict(point.outdoor_c,power_w)
                 heat_kwh=elec_kwh*cop_v
                 next_soc=soc+heat_kwh-point.heat_demand_kwh

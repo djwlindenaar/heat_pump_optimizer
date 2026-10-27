@@ -1,7 +1,7 @@
 """Read Heating Analytics and Nordpool forecasts from Home Assistant."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from homeassistant.core import HomeAssistant
@@ -9,6 +9,9 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.util import dt as dt_util
 
 from .optimizer import ForecastPoint
+
+INTERVAL_MINUTES = 15
+INTERVALS_PER_HOUR = 60 // INTERVAL_MINUTES
 
 
 def _as_datetime(value: Any) -> datetime:
@@ -27,8 +30,15 @@ def _as_datetime(value: Any) -> datetime:
     return result
 
 
-def _hour_key(value: Any) -> datetime:
-    """Normalize a datetime-like value to an exact UTC hour."""
+def _interval_key(value: Any) -> datetime:
+    """Normalize a datetime-like value to the start of its UTC 15-minute interval."""
+    value_dt = _as_datetime(value).astimezone(timezone.utc)
+    minute = (value_dt.minute // INTERVAL_MINUTES) * INTERVAL_MINUTES
+    return value_dt.replace(minute=minute, second=0, microsecond=0)
+
+
+def _hour_start(value: Any) -> datetime:
+    """Normalize an hourly Heating Analytics timestamp to its UTC hour start."""
     return _as_datetime(value).astimezone(timezone.utc).replace(
         minute=0,
         second=0,
@@ -46,7 +56,7 @@ def _extract_prices(state, label: str) -> dict[datetime, float]:
         start = row.get("start") or row.get("start_time")
         value = row.get("value")
         if start is not None and value is not None:
-            result[_hour_key(start)] = float(value)
+            result[_interval_key(start)] = float(value)
 
     if not result:
         raise HomeAssistantError(
@@ -94,10 +104,6 @@ async def async_build_forecast(
 
     points = []
     for row in heat_rows:
-        key = _hour_key(row["datetime"])
-        if key not in buy_prices or key not in feed_in_prices:
-            continue
-
         demand = row.get("kwh")
         unit = (row.get("unit_breakdown") or {}).get(isolate_sensor) or {}
         if unit.get("net_kwh") is not None:
@@ -105,19 +111,31 @@ async def async_build_forecast(
         if demand is None:
             continue
 
-        points.append(
-            ForecastPoint(
-                timestamp=key,
-                heat_demand_kwh=float(demand),
-                outdoor_c=float(row["temp"]),
-                buy_price=buy_prices[key],
-                sell_price=feed_in_prices[key],
-                pv_kwh=0.0,
+        quarter_demand = float(demand) / INTERVALS_PER_HOUR
+        hour_start = _hour_start(row["datetime"])
+        outdoor_c = float(row["temp"])
+
+        for quarter in range(INTERVALS_PER_HOUR):
+            key = hour_start + timedelta(minutes=quarter * INTERVAL_MINUTES)
+            if key not in buy_prices or key not in feed_in_prices:
+                continue
+
+            points.append(
+                ForecastPoint(
+                    timestamp=key,
+                    heat_demand_kwh=quarter_demand,
+                    outdoor_c=outdoor_c,
+                    buy_price=buy_prices[key],
+                    sell_price=feed_in_prices[key],
+                    pv_kwh=0.0,
+                )
             )
-        )
+
+    points.sort(key=lambda point: point.timestamp)
 
     if not points:
         raise HomeAssistantError(
-            "No overlapping Heating Analytics, buying-price, and feed-in-price hours"
+            "No overlapping Heating Analytics, buying-price, and feed-in-price "
+            "15-minute intervals"
         )
     return points

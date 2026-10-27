@@ -1,20 +1,14 @@
 from __future__ import annotations
-
 from datetime import timedelta
 import logging
-
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-
 from .const import *
 from .cop_model import COPModel
-from .forecast import async_build_forecast
+from .forecast import INTERVALS_PER_HOUR, async_build_forecast
 from .optimizer import optimize
-
 _LOGGER = logging.getLogger(__name__)
-
-
 class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry):
         self.entry = entry
@@ -30,7 +24,6 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
             config_entry=entry,
             update_interval=timedelta(minutes=int(opts[CONF_UPDATE_MINUTES])),
         )
-
     async def _async_update_data(self):
         try:
             horizon = int(self.opts[CONF_HORIZON_HOURS])
@@ -43,7 +36,7 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
                 self.opts[CONF_NORDPOOL_FEED_IN_ENTITY],
                 days,
             )
-            points = points[:horizon]
+            points = points[:horizon * INTERVALS_PER_HOUR]
             levels = [
                 int(value.strip())
                 for value in str(self.opts[CONF_POWER_LEVELS]).split(",")
@@ -70,7 +63,8 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
                 "total_cost_eur": round(
                     sum(row["interval_cost_eur"] for row in schedule), 4
                 ),
-                "forecast_hours": len(schedule),
+                "forecast_hours": round(len(schedule) / INTERVALS_PER_HOUR, 2),
+                "forecast_intervals": len(schedule),
             }
         except Exception as err:
             raise UpdateFailed(str(err)) from err
