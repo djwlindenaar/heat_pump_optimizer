@@ -4,6 +4,7 @@ import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 from .const import *
 from .cop_model import COPModel
 from .forecast import INTERVALS_PER_HOUR, async_build_forecast, async_get_heating_demand
@@ -50,7 +51,26 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
             levels = [int(v.strip()) for v in str(self.opts[CONF_POWER_LEVELS]).split(',')]
             model = COPModel(str(self.opts[CONF_COP_CORRECTION]))
             schedule = await self.hass.async_add_executor_job(lambda: optimize(points, model, power_levels_w=levels, slab_min_kwh=float(self.opts[CONF_SLAB_MIN]), slab_max_kwh=float(self.opts[CONF_SLAB_MAX]), initial_slab_kwh=slab.energy_kwh, terminal_reserve_kwh=float(self.opts[CONF_TERMINAL_RESERVE]), state_step_kwh=float(self.opts[CONF_STATE_STEP]), startup_cost_eur=float(self.opts[CONF_STARTUP_COST])))
-            first = schedule[0]
-            return {'target_power_w': first['target_electrical_power_w'], 'current': first, 'schedule': schedule, 'total_cost_eur': round(sum((r['interval_cost_eur'] for r in schedule)), 4), 'forecast_hours': round(len(schedule) / INTERVALS_PER_HOUR, 2), 'forecast_intervals': len(schedule), 'slab_state': slab}
+            local_schedule = [
+                {
+                    **row,
+                    'timestamp': dt_util.as_local(row['timestamp']),
+                }
+                for row in schedule
+            ]
+            first = local_schedule[0]
+            return {
+                'target_power_w': first['target_electrical_power_w'],
+                'current': first,
+                'schedule': local_schedule,
+                'total_cost_eur': round(
+                    sum(r['interval_cost_eur'] for r in local_schedule), 4
+                ),
+                'forecast_hours': round(
+                    len(local_schedule) / INTERVALS_PER_HOUR, 2
+                ),
+                'forecast_intervals': len(local_schedule),
+                'slab_state': slab,
+            }
         except Exception as err:
             raise UpdateFailed(str(err)) from err
