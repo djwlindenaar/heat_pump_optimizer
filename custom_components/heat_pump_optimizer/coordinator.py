@@ -15,9 +15,10 @@ from .const import *
 from .cop_model import COPModel
 from .forecast import (
     INTERVALS_PER_HOUR,
-    async_build_forecast,
-    async_get_heating_demand,
+    async_refresh_heating_forecast,
+    build_forecast_from_rows,
 )
+from .heating_forecast_cache import HeatingAnalyticsForecastCache
 from .optimizer import optimize
 from .slab_state import SlabStateEstimator
 
@@ -38,6 +39,7 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
             hass,
             float(self.opts[CONF_INITIAL_SLAB]),
         )
+        self.heating_forecast_cache = HeatingAnalyticsForecastCache(hass)
         self._loaded = False
         self._cancel_schedule_timer: Callable[[], None] | None = None
 
@@ -57,28 +59,34 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
             raise ValueError(f"Entity not found: {self.opts[key]}")
         return float(state.state)
 
-    async def _update_slab_state(self):
+    async def _update_slab_state(self, rows: list[dict]):
         if not self._loaded:
             await self.estimator.async_load()
             self._loaded = True
 
-        equilibrium_hours = int(self.opts[CONF_EQUILIBRIUM_HOURS])
-        rows = await async_get_heating_demand(
-            self.hass,
-            self.opts[CONF_HEATING_ANALYTICS_ENTITY],
-            self.opts[CONF_ISOLATE_SENSOR],
-            max(1, (equilibrium_hours + 23) // 24),
-        )
         if not rows:
             raise ValueError(
-                "Heating Analytics returned no demand for slab estimator"
+                "Heating Analytics cache contains no demand for slab estimator"
             )
 
-        current_hour_kwh = rows[0][1]
+        equilibrium_hours = int(self.opts[CONF_EQUILIBRIUM_HOURS])
+        current_hour = dt_util.utcnow().replace(
+            minute=0, second=0, microsecond=0
+        )
+        current_row = next(
+            (row for row in rows if row["datetime"] == current_hour),
+            None,
+        )
+        if current_row is None:
+            # First startup inside an hour may have no cached current-hour row yet.
+            # Do not invent a historical loss value; use zero for this one update.
+            current_hour_kwh = 0.0
+        else:
+            current_hour_kwh = float(current_row["kwh"])
+
         average_rows = rows[:equilibrium_hours]
-        average_kw = sum(value for _, value in average_rows) / max(
-            1,
-            len(average_rows),
+        average_kw = sum(float(row["kwh"]) for row in average_rows) / max(
+            1, len(average_rows)
         )
 
         return await self.estimator.async_update(
@@ -179,17 +187,21 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
 
     async def _async_update_data(self) -> dict:
         try:
-            slab = await self._update_slab_state()
             horizon = int(self.opts[CONF_HORIZON_HOURS])
             days = max(1, (horizon + 23) // 24)
-
-            points = await async_build_forecast(
+            heat_rows = await async_refresh_heating_forecast(
                 self.hass,
+                self.heating_forecast_cache,
                 self.opts[CONF_HEATING_ANALYTICS_ENTITY],
                 self.opts[CONF_ISOLATE_SENSOR],
+                days,
+            )
+            slab = await self._update_slab_state(heat_rows)
+            points = build_forecast_from_rows(
+                self.hass,
+                heat_rows,
                 self.opts[CONF_NORDPOOL_BUY_ENTITY],
                 self.opts[CONF_NORDPOOL_FEED_IN_ENTITY],
-                days,
             )
             points = points[: horizon * INTERVALS_PER_HOUR]
 

@@ -72,3 +72,6 @@ Estimated slab energy attributes expose last measured heat input, modeled heat l
 - The current heat-loss update uses the first returned Heating Analytics forecast hour as the present load proxy. If Heating Analytics later exposes a historical/current-demand API, that should replace this approximation.
 - The observer assumes the heat energy entity measures cumulative thermal energy delivered to the slab.
 - Temperature sensor delay is handled by filtering and weak correction, not an explicit transport-delay model.
+
+## Persistent Heating Analytics forecast cache
+Hourly Heating Analytics rows are persisted in Home Assistant storage. On every coordinator refresh, hours before the current UTC hour are removed and every newly returned hour replaces the cached value for that timestamp. If Heating Analytics no longer returns the current hour, its last forecast remains cached and supplies the remaining 15-minute intervals of that hour. The coordinator retrieves Heating Analytics only once per optimization update and shares the merged rows between the slab-state observer and future optimization. On a first-ever startup inside an hour, no historical current-hour forecast exists; slab heat-loss subtraction is therefore zero for that update, while optimization starts as soon as a cached/current forecast interval is available.
