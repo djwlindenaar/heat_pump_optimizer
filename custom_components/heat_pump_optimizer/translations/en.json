@@ -38,7 +38,7 @@
     "step": {
       "init": {
         "title": "Optimizer options",
-        "description": "Tune the optimization and thermal-model parameters. The next screen manages heat-pump operating points.",
+        "description": "Tune the optimization and thermal-model parameters. The next screen configures heat-pump operating points.",
         "data": {
           "horizon_hours": "Optimization horizon (hours)",
           "update_minutes": "Update interval (minutes)",
@@ -57,18 +57,32 @@
       },
       "operating_points": {
         "title": "Heat-pump operating points",
-        "description": "{operating_points_table}",
+        "description": "Enter electrical power and COP correction factor pairs. Zero power is always available automatically.",
         "data": {
-          "operating_point_action": "Action or operating point"
-        }
-      },
-      "edit_operating_point": {
-        "title": "Edit heat-pump operating point",
-        "description": "{row_description}",
-        "data": {
-          "power_w": "Electrical power",
-          "cop_factor": "COP correction factor",
-          "row_action": "Action"
+          "power_1_w": "Operating point 1 - electrical power (W)",
+          "cop_1_factor": "Operating point 1 - COP correction factor",
+          "power_2_w": "Operating point 2 - electrical power (W)",
+          "cop_2_factor": "Operating point 2 - COP correction factor",
+          "power_3_w": "Operating point 3 - electrical power (W)",
+          "cop_3_factor": "Operating point 3 - COP correction factor",
+          "power_4_w": "Operating point 4 - electrical power (W)",
+          "cop_4_factor": "Operating point 4 - COP correction factor",
+          "power_5_w": "Operating point 5 - electrical power (W)",
+          "cop_5_factor": "Operating point 5 - COP correction factor",
+          "power_6_w": "Operating point 6 - electrical power (W)",
+          "cop_6_factor": "Operating point 6 - COP correction factor",
+          "power_7_w": "Operating point 7 - electrical power (W)",
+          "cop_7_factor": "Operating point 7 - COP correction factor",
+          "power_8_w": "Operating point 8 - electrical power (W)",
+          "cop_8_factor": "Operating point 8 - COP correction factor",
+          "power_9_w": "Operating point 9 - electrical power (W)",
+          "cop_9_factor": "Operating point 9 - COP correction factor",
+          "power_10_w": "Operating point 10 - electrical power (W)",
+          "cop_10_factor": "Operating point 10 - COP correction factor",
+          "power_11_w": "Operating point 11 - electrical power (W)",
+          "cop_11_factor": "Operating point 11 - COP correction factor",
+          "power_12_w": "Operating point 12 - electrical power (W)",
+          "cop_12_factor": "Operating point 12 - COP correction factor"
         }
       }
     },
@@ -78,11 +92,7 @@
       "terminal_reserve_out_of_range": "Terminal reserve must be between the minimum and maximum.",
       "invalid_power_levels": "Enter non-negative whole-number power levels separated by commas.",
       "invalid_cop_curve": "Enter at least two positive power:factor pairs separated by commas.",
-      "invalid_operating_points": "Operating points must contain unique positive power values and positive COP correction factors.",
-      "not_enough_operating_points": "Configure at least two operating points.",
-      "duplicate_power": "Each electrical power value must be unique.",
-      "invalid_power": "Electrical power must be greater than zero.",
-      "invalid_cop_factor": "COP correction factor must be greater than zero."
+      "invalid_operating_points": "Operating points must contain unique positive power values and positive COP correction factors."
     }
   }
 }
