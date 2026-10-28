@@ -49,7 +49,7 @@
           "power_levels_w": "Allowed electrical powers (comma-separated W)",
           "startup_cost_eur": "Cost penalty per start (EUR)",
           "state_step_kwh": "Slab-state calculation step (kWh)",
-          "cop_correction_curve": "COP correction curve (power:factor pairs)",
+          "cop_correction_curve": "COP correction curve (one power:factor pair per line)",
           "slab_capacity_kwh_per_k": "Effective slab capacity (kWh/K)",
           "floor_transfer_kw_per_k": "Floor heat transfer coefficient (kW/K)",
           "temp_filter_alpha": "Slab temperature filter alpha",
@@ -63,7 +63,7 @@
       "initial_slab_out_of_range": "Initial slab energy must be between the minimum and maximum.",
       "terminal_reserve_out_of_range": "Terminal reserve must be between the minimum and maximum.",
       "invalid_power_levels": "Enter non-negative whole-number power levels separated by commas.",
-      "invalid_cop_curve": "Enter at least two positive power:factor pairs separated by commas."
+      "invalid_cop_curve": "Enter at least two positive power:factor pairs, one per line."
     }
   }
 }

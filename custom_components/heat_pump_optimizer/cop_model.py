@@ -15,9 +15,12 @@ def _interp(x, xs, ys):
 
 def parse_correction_curve(text):
     points = []
-    for item in text.split(','):
-        p, c = item.strip().split(':')
-        points.append((float(p), float(c)))
+    for item in text.replace(',', '\n').splitlines():
+        item = item.strip()
+        if not item:
+            continue
+        p, c = item.split(':')
+        points.append((float(p.strip()), float(c.strip())))
     points.sort()
     if len(points) < 2:
         raise ValueError('COP correction curve needs at least two power:factor points')
