@@ -205,11 +205,20 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
             )
             points = points[: horizon * INTERVALS_PER_HOUR]
 
-            levels = [
-                int(value.strip())
-                for value in str(self.opts[CONF_POWER_LEVELS]).split(",")
-            ]
-            model = COPModel(str(self.opts[CONF_COP_CORRECTION]))
+            operating_points = self.opts.get(CONF_OPERATING_POINTS)
+            if operating_points:
+                levels = [0] + [int(point["power_w"]) for point in operating_points]
+                correction_curve = ",".join(
+                    f'{int(point["power_w"])}:{float(point["cop_factor"])}'
+                    for point in operating_points
+                )
+            else:
+                levels = [
+                    int(value.strip())
+                    for value in str(self.opts[CONF_POWER_LEVELS]).split(",")
+                ]
+                correction_curve = str(self.opts[CONF_COP_CORRECTION])
+            model = COPModel(correction_curve)
 
             schedule = await self.hass.async_add_executor_job(
                 lambda: optimize(
