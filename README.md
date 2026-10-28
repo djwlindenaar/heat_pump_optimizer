@@ -25,3 +25,6 @@ Use an HA automation to copy the target-power sensor into the number entity cons
 - Slab state is relative and initialized from configuration on each solve. A later release must estimate actual slab state from delivered minus demanded heat.
 - COP correction curve is editable in the config flow. It is not trained inside HA yet.
 - This integration does not directly write to the heat-pump controller.
+
+## Persistent slab state
+See [DESIGN.md](DESIGN.md) for the persistent thermal-state observer, temperature grounding, 15-minute model and calibration parameters.
