@@ -22,12 +22,12 @@ def optimize(points: list[ForecastPoint], cop: COPModel, *, power_levels_w: list
     if not points:
         return []
     lo, hi = (_q(slab_min_kwh, state_step_kwh), _q(slab_max_kwh, state_step_kwh))
-    initial = max(lo, min(hi, _q(initial_slab_kwh, state_step_kwh)))
-    states = {(initial, False): (0.0, [])}
+    initial_q = max(lo, min(hi, _q(initial_slab_kwh, state_step_kwh)))
+    initial_soc = max(slab_min_kwh, min(slab_max_kwh, initial_slab_kwh))
+    states = {(initial_q, False): (0.0, initial_soc, [])}
     for point in points:
         nxt = {}
-        for (soc_q, was_on), (cost, path) in states.items():
-            soc = soc_q * state_step_kwh
+        for (soc_q, was_on), (cost, soc, path) in states.items():
             for power_w in power_levels_w:
                 on = power_w > 0
                 elec_kwh = power_w / 1000.0 * INTERVAL_HOURS
@@ -43,13 +43,13 @@ def optimize(points: list[ForecastPoint], cop: COPModel, *, power_levels_w: list
                 total = cost + interval_cost + (startup_cost_eur if start else 0.0)
                 key = (new_q, on)
                 old = nxt.get(key)
-                row = {'timestamp': point.timestamp, 'target_electrical_power_w': power_w, 'predicted_cop': round(cop_v, 3) if on else None, 'predicted_heat_kwh': round(heat_kwh, 3), 'heat_demand_kwh': round(point.heat_demand_kwh, 3), 'slab_energy_kwh': round(new_q * state_step_kwh, 3), 'buy_price_eur_kwh': point.buy_price, 'sell_price_eur_kwh': point.sell_price, 'pv_kwh': point.pv_kwh, 'interval_cost_eur': round(interval_cost + (startup_cost_eur if start else 0), 4)}
+                row = {'timestamp': point.timestamp, 'target_electrical_power_w': power_w, 'predicted_cop': round(cop_v, 3) if on else None, 'predicted_heat_kwh': round(heat_kwh, 3), 'heat_demand_kwh': round(point.heat_demand_kwh, 3), 'slab_energy_kwh': round(next_soc, 3), 'buy_price_eur_kwh': point.buy_price, 'sell_price_eur_kwh': point.sell_price, 'pv_kwh': point.pv_kwh, 'interval_cost_eur': round(interval_cost + (startup_cost_eur if start else 0), 4)}
                 if old is None or total < old[0]:
-                    nxt[key] = (total, path + [row])
+                    nxt[key] = (total, next_soc, path + [row])
         if not nxt:
             raise ValueError('No feasible schedule. Increase slab range/power levels or check heat demand units.')
         states = nxt
-    feasible = [v for (soc, _), v in states.items() if soc * state_step_kwh >= terminal_reserve_kwh]
+    feasible = [value for value in states.values() if value[1] >= terminal_reserve_kwh]
     if not feasible:
         feasible = list(states.values())
-    return min(feasible, key=lambda x: x[0])[1]
+    return min(feasible, key=lambda x: x[0])[2]
