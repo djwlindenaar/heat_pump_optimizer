@@ -16,7 +16,7 @@
           "nordpool_feed_in_entity": "Nordpool feed-in-price entity",
           "heat_energy_entity": "Measured slab heat energy entity (cumulative kWh)",
           "slab_temperature_entity": "Slab temperature entity",
-          "room_temperature_entity": "Room temperature entity"
+          "room_temperature_entity": "Comfort temperature / room setpoint entity"
         }
       },
       "reconfigure": {
@@ -29,7 +29,7 @@
           "nordpool_feed_in_entity": "Nordpool feed-in-price entity",
           "heat_energy_entity": "Measured slab heat energy entity (cumulative kWh)",
           "slab_temperature_entity": "Slab temperature entity",
-          "room_temperature_entity": "Room temperature entity"
+          "room_temperature_entity": "Comfort temperature / room setpoint entity"
         }
       }
     }
@@ -53,8 +53,8 @@
           "slab_capacity_kwh_per_k": "Effective slab capacity (kWh/K)",
           "floor_transfer_kw_per_k": "Floor heat transfer coefficient (kW/K)",
           "temp_filter_alpha": "Slab temperature filter alpha",
-          "temp_correction_alpha": "Temperature grounding correction alpha",
-          "equilibrium_hours": "Equilibrium heat-loss averaging period (hours)"
+          "equilibrium_hours": "Equilibrium heat-loss averaging period (hours)",
+          "temp_correction_time_constant_hours": "Temperature grounding time constant (hours)"
         }
       }
     },

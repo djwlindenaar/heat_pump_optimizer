@@ -80,7 +80,7 @@ class SlabEnergySensor(SlabBase):
 
     @property
     def extra_state_attributes(self):
-        return {'heat_in_kwh': self.s.last_heat_input_kwh, 'heat_loss_kwh': self.s.last_heat_loss_kwh, 'temperature_correction_kwh': self.s.last_temperature_correction_kwh, 'last_update': self.s.last_update}
+        return {'heat_in_kwh': self.s.last_heat_input_kwh, 'heat_loss_kwh': self.s.last_heat_loss_kwh, 'temperature_correction_kwh': self.s.last_temperature_correction_kwh, 'elapsed_hours': self.s.last_elapsed_hours, 'temperature_correction_alpha': self.s.last_temperature_correction_alpha, 'last_update': self.s.last_update}
 
 class SlabTempSensor(Base):
     _attr_name = 'Filtered slab temperature'

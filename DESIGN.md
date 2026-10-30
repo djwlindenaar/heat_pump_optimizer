@@ -75,3 +75,13 @@ Estimated slab energy attributes expose last measured heat input, modeled heat l
 
 ## Persistent Heating Analytics forecast cache
 Hourly Heating Analytics rows are persisted in Home Assistant storage. On every coordinator refresh, hours before the current UTC hour are removed and every newly returned hour replaces the cached value for that timestamp. If Heating Analytics no longer returns the current hour, its last forecast remains cached and supplies the remaining 15-minute intervals of that hour. The coordinator retrieves Heating Analytics only once per optimization update and shares the merged rows between the slab-state observer and future optimization. On a first-ever startup inside an hour, no historical current-hour forecast exists; slab heat-loss subtraction is therefore zero for that update, while optimization starts as soon as a cached/current forecast interval is available.
+
+
+### Time-aware state integration and partial current interval
+The slab observer advances over the actual elapsed time since its persisted `last_update`. Heating Analytics hourly kWh is interpreted as average kW for that hour and integrated piecewise across any hour boundaries. Therefore observer behavior is independent of coordinator refresh frequency.
+
+Temperature grounding uses a configurable time constant `temp_correction_time_constant_hours`. The effective update gain is `alpha = 1 - exp(-elapsed_hours / time_constant_hours)`, avoiding a correction strength that changes with polling interval.
+
+The optimizer includes the current quarter. Its first point starts at the current time and ends on the next quarter boundary, so its `duration_hours` is between 0 and 0.25. Later points use 0.25 hours. Heating demand, electric energy, produced heat, and cost all scale with the point duration. A new optimization may therefore change the target immediately during the current quarter; the next observer update uses measured delivered heat, not the previous prediction.
+
+The comfort-temperature input is the intended room setpoint used to define equilibrium slab temperature, not the instantaneous measured room temperature.

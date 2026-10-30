@@ -1,30 +1,25 @@
-# Heat Pump Cost Optimizer for Home Assistant
+## Heat Pump Cost Optimizer for Home Assistant
 
-First functional custom integration for Heating Analytics + Nordpool + a power-controlled heat pump.
+A Home Assistant custom integration that optimizes a power-controlled heat pump against 15-minute buying and feed-in prices while using a persistent floor-slab thermal-storage estimate.
 
-## Install
-Copy `custom_components/heat_pump_optimizer` to `/config/custom_components/`, restart Home Assistant, then add **Heat Pump Cost Optimizer** in Settings > Devices & services.
+### Inputs
+- Heating Analytics hourly heat-demand forecast
+- Separate Nordpool buying and feed-in price entities with quarter-hour timestamps
+- Cumulative measured thermal energy delivered to the slab
+- Slab temperature
+- Comfort-temperature or room-setpoint entity
+- Configurable electrical power levels and COP correction curve
 
-## Inputs
-- `heating_analytics.get_forecast`, with `isolate_sensor` set to the heat-pump energy sensor.
-- Nordpool entity exposing `raw_today` and `raw_tomorrow`, each item containing `start` and `value`.
-- Datasheet COP curve at LWT 30 C, corrected by a transparent configured power factor curve.
+### Operation
+The persistent slab observer is updated from measured delivered heat, elapsed-time-integrated Heating Analytics demand, and slow temperature grounding. Every optimization starts from this updated physical state. The first forecast interval represents only the remaining part of the current quarter; later intervals are complete 15-minute periods. A timed coordinator callback activates each scheduled target at its timestamp.
 
-## Outputs
-- `sensor.heat_pump_cost_optimizer_target_electrical_power`
-- `sensor.heat_pump_cost_optimizer_schedule`
-- `sensor.heat_pump_cost_optimizer_forecast_optimized_cost`
-- `button.heat_pump_cost_optimizer_run_optimizer_now`
+### Outputs
+- Target electrical power
+- Quarter-hour schedule
+- Forecast optimized cost
+- Estimated slab energy and observer diagnostics
+- Filtered slab temperature, equilibrium temperature, and temperature-reference energy
 
-Use an HA automation to copy the target-power sensor into the number entity consumed by the existing heat-pump controller. Start in shadow mode.
+Use an automation to copy the target-power sensor into the number entity consumed by the heat-pump controller. Start in shadow mode and validate the observer and schedule before enabling closed-loop control.
 
-## Important v0.1 assumptions
-- Heating Analytics forecast intervals and Nordpool prices are hourly.
-- Sell price equals buy price.
-- PV is zero in v0.1.
-- Slab state is relative and initialized from configuration on each solve. A later release must estimate actual slab state from delivered minus demanded heat.
-- COP correction curve is editable in the config flow. It is not trained inside HA yet.
-- This integration does not directly write to the heat-pump controller.
-
-## Persistent slab state
-See [DESIGN.md](DESIGN.md) for the persistent thermal-state observer, temperature grounding, 15-minute model and calibration parameters.
+See [DESIGN.md](DESIGN.md) for equations, persistence, timing, and calibration details.

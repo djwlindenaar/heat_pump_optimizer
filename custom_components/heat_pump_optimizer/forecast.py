@@ -137,7 +137,7 @@ def build_forecast_from_rows(
 
     points = []
     for row in heat_rows:
-        quarter_demand = float(row["kwh"]) / INTERVALS_PER_HOUR
+        hourly_demand_kwh = float(row["kwh"])
         hour_start = _hour_start(row["datetime"])
         outdoor_c = float(row["temp"])
         for quarter in range(INTERVALS_PER_HOUR):
@@ -146,10 +146,18 @@ def build_forecast_from_rows(
                 continue
             if key not in buy_prices or key not in feed_in_prices:
                 continue
+            interval_end = key + timedelta(minutes=INTERVAL_MINUTES)
+            interval_start = max(now, key)
+            duration_hours = (
+                interval_end - interval_start
+            ).total_seconds() / 3600.0
+            if duration_hours <= 0:
+                continue
             points.append(
                 ForecastPoint(
                     timestamp=key,
-                    heat_demand_kwh=quarter_demand,
+                    duration_hours=duration_hours,
+                    heat_demand_kwh=hourly_demand_kwh * duration_hours,
                     outdoor_c=outdoor_c,
                     buy_price=buy_prices[key],
                     sell_price=feed_in_prices[key],

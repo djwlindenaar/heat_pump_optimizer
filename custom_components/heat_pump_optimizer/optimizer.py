@@ -9,6 +9,7 @@ INTERVAL_HOURS = INTERVAL_MINUTES / 60.0
 @dataclass(frozen=True)
 class ForecastPoint:
     timestamp: datetime
+    duration_hours: float
     heat_demand_kwh: float
     outdoor_c: float
     buy_price: float
@@ -30,7 +31,7 @@ def optimize(points: list[ForecastPoint], cop: COPModel, *, power_levels_w: list
         for (soc_q, was_on), (cost, soc, path) in states.items():
             for power_w in power_levels_w:
                 on = power_w > 0
-                elec_kwh = power_w / 1000.0 * INTERVAL_HOURS
+                elec_kwh = power_w / 1000.0 * point.duration_hours
                 cop_v = cop.predict(point.outdoor_c, power_w)
                 heat_kwh = elec_kwh * cop_v
                 next_soc = soc + heat_kwh - point.heat_demand_kwh
@@ -43,7 +44,7 @@ def optimize(points: list[ForecastPoint], cop: COPModel, *, power_levels_w: list
                 total = cost + interval_cost + (startup_cost_eur if start else 0.0)
                 key = (new_q, on)
                 old = nxt.get(key)
-                row = {'timestamp': point.timestamp, 'target_electrical_power_w': power_w, 'predicted_cop': round(cop_v, 3) if on else None, 'predicted_heat_kwh': round(heat_kwh, 3), 'heat_demand_kwh': round(point.heat_demand_kwh, 3), 'slab_energy_kwh': round(next_soc, 3), 'buy_price_eur_kwh': point.buy_price, 'sell_price_eur_kwh': point.sell_price, 'pv_kwh': point.pv_kwh, 'interval_cost_eur': round(interval_cost + (startup_cost_eur if start else 0), 4)}
+                row = {'timestamp': point.timestamp, 'duration_hours': round(point.duration_hours, 6), 'target_electrical_power_w': power_w, 'predicted_cop': round(cop_v, 3) if on else None, 'predicted_heat_kwh': round(heat_kwh, 3), 'heat_demand_kwh': round(point.heat_demand_kwh, 3), 'slab_energy_kwh': round(next_soc, 3), 'buy_price_eur_kwh': point.buy_price, 'sell_price_eur_kwh': point.sell_price, 'pv_kwh': point.pv_kwh, 'interval_cost_eur': round(interval_cost + (startup_cost_eur if start else 0), 4)}
                 if old is None or total < old[0]:
                     nxt[key] = (total, next_soc, path + [row])
         if not nxt:

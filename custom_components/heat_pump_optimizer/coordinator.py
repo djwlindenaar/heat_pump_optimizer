@@ -59,39 +59,62 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
             raise ValueError(f"Entity not found: {self.opts[key]}")
         return float(state.state)
 
+    def _integrated_heat_loss_kwh(
+        self,
+        rows: list[dict],
+        start: datetime,
+        end: datetime,
+    ) -> float:
+        """Integrate cached hourly Heating Analytics demand over elapsed time."""
+        if end <= start:
+            return 0.0
+        demand_by_hour = {row["datetime"]: float(row["kwh"]) for row in rows}
+        total = 0.0
+        cursor = start
+        while cursor < end:
+            hour_start = cursor.replace(minute=0, second=0, microsecond=0)
+            hour_end = hour_start + timedelta(hours=1)
+            segment_end = min(end, hour_end)
+            duration_hours = (segment_end - cursor).total_seconds() / 3600.0
+            total += demand_by_hour.get(hour_start, 0.0) * duration_hours
+            cursor = segment_end
+        return total
+
     async def _update_slab_state(self, rows: list[dict]):
         if not self._loaded:
             await self.estimator.async_load()
             self._loaded = True
-
         if not rows:
             raise ValueError(
                 "Heating Analytics cache contains no demand for slab estimator"
             )
-
-        equilibrium_hours = int(self.opts[CONF_EQUILIBRIUM_HOURS])
-        current_hour = dt_util.utcnow().replace(
-            minute=0, second=0, microsecond=0
-        )
-        current_row = next(
-            (row for row in rows if row["datetime"] == current_hour),
-            None,
-        )
-        if current_row is None:
-            # First startup inside an hour may have no cached current-hour row yet.
-            # Do not invent a historical loss value; use zero for this one update.
-            current_hour_kwh = 0.0
+        now = dt_util.utcnow()
+        if self.estimator.state.last_update is None:
+            elapsed_hours = 0.0
+            heat_loss_kwh = 0.0
         else:
-            current_hour_kwh = float(current_row["kwh"])
-
+            previous_update = dt_util.parse_datetime(
+                self.estimator.state.last_update
+            )
+            if previous_update is None:
+                elapsed_hours = 0.0
+                heat_loss_kwh = 0.0
+            else:
+                previous_update = previous_update.astimezone(now.tzinfo)
+                elapsed_hours = max(
+                    0.0, (now - previous_update).total_seconds() / 3600.0
+                )
+                heat_loss_kwh = self._integrated_heat_loss_kwh(
+                    rows, previous_update, now
+                )
+        equilibrium_hours = int(self.opts[CONF_EQUILIBRIUM_HOURS])
         average_rows = rows[:equilibrium_hours]
         average_kw = sum(float(row["kwh"]) for row in average_rows) / max(
             1, len(average_rows)
         )
-
         return await self.estimator.async_update(
             heat_meter_kwh=self._sensor_float(CONF_HEAT_ENERGY_ENTITY),
-            heat_loss_kwh=current_hour_kwh / INTERVALS_PER_HOUR,
+            heat_loss_kwh=heat_loss_kwh,
             slab_temperature_c=self._sensor_float(
                 CONF_SLAB_TEMPERATURE_ENTITY
             ),
@@ -104,9 +127,10 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
                 self.opts[CONF_FLOOR_TRANSFER_KW_PER_K]
             ),
             temp_filter_alpha=float(self.opts[CONF_TEMP_FILTER_ALPHA]),
-            temp_correction_alpha=float(
-                self.opts[CONF_TEMP_CORRECTION_ALPHA]
+            temp_correction_time_constant_hours=float(
+                self.opts[CONF_TEMP_CORRECTION_TIME_CONSTANT_HOURS]
             ),
+            elapsed_hours=elapsed_hours,
             slab_min_kwh=float(self.opts[CONF_SLAB_MIN]),
             slab_max_kwh=float(self.opts[CONF_SLAB_MAX]),
         )
@@ -203,7 +227,14 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
                 self.opts[CONF_NORDPOOL_BUY_ENTITY],
                 self.opts[CONF_NORDPOOL_FEED_IN_ENTITY],
             )
-            points = points[: horizon * INTERVALS_PER_HOUR]
+            selected_points = []
+            selected_hours = 0.0
+            for point in points:
+                if selected_hours >= horizon:
+                    break
+                selected_points.append(point)
+                selected_hours += point.duration_hours
+            points = selected_points
 
             levels = [
                 int(value.strip())
@@ -245,7 +276,7 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
                     4,
                 ),
                 "forecast_hours": round(
-                    len(local_schedule) / INTERVALS_PER_HOUR,
+                    sum(row["duration_hours"] for row in local_schedule),
                     2,
                 ),
                 "forecast_intervals": len(local_schedule),
