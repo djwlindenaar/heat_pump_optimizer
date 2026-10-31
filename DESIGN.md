@@ -74,7 +74,7 @@ Estimated slab energy attributes expose last measured heat input, modeled heat l
 - Temperature sensor delay is handled by filtering and weak correction, not an explicit transport-delay model.
 
 ## Persistent Heating Analytics forecast cache
-Hourly Heating Analytics rows are persisted in Home Assistant storage. On every coordinator refresh, hours before the current UTC hour are removed and every newly returned hour replaces the cached value for that timestamp. If Heating Analytics no longer returns the current hour, its last forecast remains cached and supplies the remaining 15-minute intervals of that hour. The coordinator retrieves Heating Analytics only once per optimization update and shares the merged rows between the slab-state observer and future optimization. On a first-ever startup inside an hour, no historical current-hour forecast exists; slab heat-loss subtraction is therefore zero for that update, while optimization starts as soon as a cached/current forecast interval is available.
+Hourly Heating Analytics rows are persisted in Home Assistant storage. Fresh forecast rows replace cached values for their timestamps; older rows are retained until the observer integrates heat loss through the current time, then rows before the current UTC hour are pruned. This preserves the history needed to reconcile slab energy after a Home Assistant restart. The coordinator retrieves Heating Analytics only once per optimization update and shares the merged rows between the slab-state observer and future optimization.
 
 
 ### Time-aware state integration and partial current interval
@@ -82,6 +82,8 @@ The slab observer advances over the actual elapsed time since its persisted `las
 
 Temperature grounding uses a configurable time constant `temp_correction_time_constant_hours`. The effective update gain is `alpha = 1 - exp(-elapsed_hours / time_constant_hours)`, avoiding a correction strength that changes with polling interval.
 
-The optimizer includes the current quarter. Its first point starts at the current time and ends on the next quarter boundary, so its `duration_hours` is between 0 and 0.25. Later points use 0.25 hours. Heating demand, electric energy, produced heat, and cost all scale with the point duration. A new optimization may therefore change the target immediately during the current quarter; the next observer update uses measured delivered heat, not the previous prediction.
+The current-quarter target is fixed from the previously published schedule, persisted plan, or configured bootstrap power. Its remaining duration is between 0 and 0.25 hours. The coordinator projects the measured slab energy through that remainder using the fixed power and demand forecast. The optimizer starts at the next quarter boundary with that projected energy and the fixed power's on/off state; subsequent points are complete 15-minute intervals. Thus refreshes cannot alter the command mid-quarter. Future schedule rows are activated at their timestamps, never early.
+
+After the first plan, the commanded power for the current quarter is locked across optimizer refreshes and persisted with the quarter timestamp. The observer's measured slab energy at refresh time is projected through the remaining part of that quarter using the locked power and forecast demand. Dynamic programming begins at the next quarter with that projected energy and the locked power's on/off state. If no saved row covers the current quarter, `bootstrap_power_w` supplies a fixed fallback command for that quarter; it defaults to 0 W.
 
 The comfort-temperature input is the intended room setpoint used to define equilibrium slab temperature, not the instantaneous measured room temperature.

@@ -19,13 +19,13 @@ class ForecastPoint:
 def _q(value: float, step: float) -> int:
     return int(round(value / step))
 
-def optimize(points: list[ForecastPoint], cop: COPModel, *, power_levels_w: list[int], slab_min_kwh: float, slab_max_kwh: float, initial_slab_kwh: float, terminal_reserve_kwh: float, state_step_kwh: float, startup_cost_eur: float) -> list[dict]:
+def optimize(points: list[ForecastPoint], cop: COPModel, *, power_levels_w: list[int], slab_min_kwh: float, slab_max_kwh: float, initial_slab_kwh: float, terminal_reserve_kwh: float, state_step_kwh: float, startup_cost_eur: float, initially_on: bool = False) -> list[dict]:
     if not points:
         return []
     lo, hi = (_q(slab_min_kwh, state_step_kwh), _q(slab_max_kwh, state_step_kwh))
     initial_q = max(lo, min(hi, _q(initial_slab_kwh, state_step_kwh)))
     initial_soc = max(slab_min_kwh, min(slab_max_kwh, initial_slab_kwh))
-    states = {(initial_q, False): (0.0, initial_soc, [])}
+    states = {(initial_q, initially_on): (0.0, initial_soc, [])}
     for point in points:
         nxt = {}
         for (soc_q, was_on), (cost, soc, path) in states.items():

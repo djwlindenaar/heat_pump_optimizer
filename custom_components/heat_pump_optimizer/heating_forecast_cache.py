@@ -57,15 +57,6 @@ class HeatingAnalyticsForecastCache:
             second=0,
             microsecond=0,
         )
-
-        # Retain the cached current hour, but discard older hours.
-        self._rows = {
-            timestamp: row
-            for timestamp, row in self._rows.items()
-            if timestamp >= current_hour
-        }
-
-        # Fresh Heating Analytics data wins for every hour it returns.
         for row in rows:
             timestamp = _as_utc_hour(row["datetime"])
             if timestamp < current_hour:
@@ -80,6 +71,22 @@ class HeatingAnalyticsForecastCache:
                 "rows": {
                     timestamp.isoformat(): row
                     for timestamp, row in self._rows.items()
+                }
+            }
+        )
+
+    async def async_prune_before(self, timestamp: datetime) -> None:
+        """Discard old rows only after the slab observer has integrated them."""
+        await self.async_load()
+        cutoff = _as_utc_hour(timestamp)
+        self._rows = {
+            key: row for key, row in self._rows.items() if key >= cutoff
+        }
+        await self._store.async_save(
+            {
+                "rows": {
+                    key.isoformat(): row
+                    for key, row in self._rows.items()
                 }
             }
         )

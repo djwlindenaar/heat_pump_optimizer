@@ -11,7 +11,7 @@ A Home Assistant custom integration that optimizes a power-controlled heat pump 
 - Configurable electrical power levels and COP correction curve
 
 ### Operation
-The persistent slab observer is updated from measured delivered heat, elapsed-time-integrated Heating Analytics demand, and slow temperature grounding. Every optimization starts from this updated physical state. The first forecast interval represents only the remaining part of the current quarter; later intervals are complete 15-minute periods. A timed coordinator callback activates each scheduled target at its timestamp.
+The persistent slab observer is updated from measured delivered heat, elapsed-time-integrated Heating Analytics demand, and slow temperature grounding. The current quarter's already-issued power is held fixed and projected to the next quarter boundary; optimization decisions begin at that boundary. A timed coordinator callback activates each later target at its timestamp.
 
 ### Outputs
 - Target electrical power
@@ -23,5 +23,7 @@ The persistent slab observer is updated from measured delivered heat, elapsed-ti
 Use an automation to copy the target-power sensor into the number entity consumed by the heat-pump controller. Start in shadow mode and validate the observer and schedule before enabling closed-loop control.
 
 For EPEX Spot, select the `sensor.epex_spot_data_total_price` entity as the buying-price entity. Its `data` attribute supplies forecast prices in €/kWh; the integration expands hourly prices into quarter-hour optimizer intervals when needed. If you do not have a separate feed-in price, select the same entity for that field. Feed-in prices currently have no effect because PV production is not modeled.
+
+Each optimization keeps the already-issued power target fixed for the remainder of the current quarter and optimizes from the next quarter. The plan is persisted so a Home Assistant restart can recover that target. The configured bootstrap power is used only when no saved current-quarter plan is available.
 
 See [DESIGN.md](DESIGN.md) for equations, persistence, timing, and calibration details.

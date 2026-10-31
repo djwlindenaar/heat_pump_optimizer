@@ -48,6 +48,7 @@
           "terminal_reserve_kwh": "Terminal reserve (kWh)",
           "power_levels_w": "Allowed electrical powers (comma-separated W)",
           "startup_cost_eur": "Cost penalty per start (EUR)",
+          "bootstrap_power_w": "Power to hold in current quarter when no saved plan exists (W)",
           "state_step_kwh": "Slab-state calculation step (kWh)",
           "cop_correction_curve": "COP correction curve (one power:factor pair per line)",
           "slab_capacity_kwh_per_k": "Effective slab capacity (kWh/K)",
