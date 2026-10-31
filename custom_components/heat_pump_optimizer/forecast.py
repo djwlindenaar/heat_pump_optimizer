@@ -1,7 +1,8 @@
-"""Read Heating Analytics and Nordpool forecasts from Home Assistant."""
+"""Read Heating Analytics and electricity prices from Home Assistant."""
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import math
 from typing import Any
 
 from homeassistant.core import HomeAssistant
@@ -44,19 +45,74 @@ def _hour_start(value: Any) -> datetime:
 
 
 def _extract_prices(state, label: str) -> dict[datetime, float]:
-    rows = []
-    for key in ("raw_today", "raw_tomorrow"):
-        rows.extend(state.attributes.get(key) or [])
+    attributes = state.attributes
+    epex_rows = attributes.get("data")
+    if epex_rows is not None:
+        unit = attributes.get("unit_of_measurement")
+        if unit != "€/kWh":
+            raise HomeAssistantError(
+                f"{label} EPEX price entity must use €/kWh; got {unit!r}"
+            )
+        rows = epex_rows or []
+    else:
+        rows = []
+        for key in ("raw_today", "raw_tomorrow"):
+            rows.extend(attributes.get(key) or [])
+
     result = {}
     for row in rows:
+        if not isinstance(row, dict):
+            continue
         start = row.get("start") or row.get("start_time")
         value = row.get("value")
-        if start is not None and value is not None:
-            result[_interval_key(start)] = float(value)
+        if value is None:
+            value = row.get("price_per_kwh")
+        if start is None or value is None:
+            continue
+
+        price = float(value)
+        if not math.isfinite(price):
+            raise HomeAssistantError(f"{label} price must be a finite number")
+
+        start_dt = _as_datetime(start).astimezone(timezone.utc)
+        end = row.get("end") or row.get("end_time")
+        if end is None:
+            interval_starts = [_interval_key(start_dt)]
+        else:
+            end_dt = _as_datetime(end).astimezone(timezone.utc)
+            if (
+                start_dt.second
+                or start_dt.microsecond
+                or start_dt.minute % INTERVAL_MINUTES
+                or end_dt.second
+                or end_dt.microsecond
+                or end_dt.minute % INTERVAL_MINUTES
+                or end_dt <= start_dt
+            ):
+                raise HomeAssistantError(
+                    f"{label} price interval must have aligned, increasing "
+                    "15-minute timestamps"
+                )
+            duration_seconds = (end_dt - start_dt).total_seconds()
+            if duration_seconds % (INTERVAL_MINUTES * 60):
+                raise HomeAssistantError(
+                    f"{label} price interval duration must be a multiple of "
+                    "15 minutes"
+                )
+            interval_count = int(duration_seconds // (INTERVAL_MINUTES * 60))
+            interval_starts = [
+                start_dt + timedelta(minutes=index * INTERVAL_MINUTES)
+                for index in range(interval_count)
+            ]
+
+        for interval_start in interval_starts:
+            result[interval_start] = price
+
     if not result:
         raise HomeAssistantError(
-            f"{label} price entity must expose raw_today/raw_tomorrow "
-            "with start and value fields"
+            f"{label} price entity must expose data with start_time, "
+            "end_time, and price_per_kwh, or raw_today/raw_tomorrow with "
+            "start and value fields"
         )
     return result
 
@@ -109,19 +165,19 @@ async def async_refresh_heating_forecast(
 def build_forecast_from_rows(
     hass: HomeAssistant,
     heat_rows: list[dict],
-    nordpool_buy_entity: str,
-    nordpool_feed_in_entity: str,
+    buy_price_entity: str,
+    feed_in_price_entity: str,
 ) -> list[ForecastPoint]:
     """Expand cached hourly HA rows to quarter-hour optimizer points."""
-    buy_state = hass.states.get(nordpool_buy_entity)
+    buy_state = hass.states.get(buy_price_entity)
     if buy_state is None:
         raise HomeAssistantError(
-            f"Nordpool buying-price entity not found: {nordpool_buy_entity}"
+            f"Buying-price entity not found: {buy_price_entity}"
         )
-    feed_in_state = hass.states.get(nordpool_feed_in_entity)
+    feed_in_state = hass.states.get(feed_in_price_entity)
     if feed_in_state is None:
         raise HomeAssistantError(
-            f"Nordpool feed-in-price entity not found: {nordpool_feed_in_entity}"
+            f"Feed-in-price entity not found: {feed_in_price_entity}"
         )
     buy_prices = _extract_prices(buy_state, "Buying")
     feed_in_prices = _extract_prices(feed_in_state, "Feed-in")

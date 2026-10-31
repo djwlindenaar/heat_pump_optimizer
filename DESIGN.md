@@ -4,7 +4,7 @@
 The integration optimizes a power-controlled heat pump against 15-minute buy/feed-in prices while treating the floor slab as thermal storage.
 
 ## Time resolution
-Nordpool prices keep their 15-minute timestamps. Heating Analytics hourly heat demand is divided equally over four quarter-hours. Electrical energy for an interval is `power_kW * 0.25 h`.
+Nordpool prices keep their 15-minute timestamps. EPEX Spot price rows use `start_time`, `end_time`, and `price_per_kwh`; hourly EPEX rows are expanded into four quarter-hours. Heating Analytics hourly heat demand is divided equally over four quarter-hours. Electrical energy for an interval is `power_kW * 0.25 h`.
 
 ## Persistent slab-state observer
 The optimizer no longer resets slab charge on every solve. `SlabStateEstimator` persists its state with Home Assistant `Store`. The configured initial slab state is used only when no persisted state exists.
@@ -41,8 +41,8 @@ The persisted observed `E_state` is supplied as `initial_slab_kwh` for every opt
 
 ## Inputs
 - Heating Analytics forecast entity and isolated heating-energy sensor
-- Nordpool buying-price entity
-- Nordpool feed-in-price entity
+- Buying-price entity (Nordpool or EPEX Spot)
+- Feed-in-price entity (may be the same entity when no export price is available)
 - Cumulative measured thermal energy delivered to the slab, kWh
 - Slab temperature sensor, °C
 - Room temperature sensor, °C

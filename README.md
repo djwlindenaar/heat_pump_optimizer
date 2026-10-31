@@ -4,7 +4,7 @@ A Home Assistant custom integration that optimizes a power-controlled heat pump 
 
 ### Inputs
 - Heating Analytics hourly heat-demand forecast
-- Separate Nordpool buying and feed-in price entities with quarter-hour timestamps
+- Buying and feed-in price entities with quarter-hour timestamps (Nordpool `raw_today`/`raw_tomorrow` and EPEX Spot `data` formats are supported)
 - Cumulative measured thermal energy delivered to the slab
 - Slab temperature
 - Comfort-temperature or room-setpoint entity
@@ -21,5 +21,7 @@ The persistent slab observer is updated from measured delivered heat, elapsed-ti
 - Filtered slab temperature, equilibrium temperature, and temperature-reference energy
 
 Use an automation to copy the target-power sensor into the number entity consumed by the heat-pump controller. Start in shadow mode and validate the observer and schedule before enabling closed-loop control.
+
+For EPEX Spot, select the `sensor.epex_spot_data_total_price` entity as the buying-price entity. Its `data` attribute supplies forecast prices in €/kWh; the integration expands hourly prices into quarter-hour optimizer intervals when needed. If you do not have a separate feed-in price, select the same entity for that field. Feed-in prices currently have no effect because PV production is not modeled.
 
 See [DESIGN.md](DESIGN.md) for equations, persistence, timing, and calibration details.

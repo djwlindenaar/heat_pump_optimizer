@@ -8,12 +8,12 @@
     "step": {
       "user": {
         "title": "Configure optimizer connections",
-        "description": "Select the Heating Analytics forecast, heat-pump energy, buying-price, and feed-in-price entities.",
+        "description": "Select the Heating Analytics forecast, heat-pump energy, buying-price, and feed-in-price entities. EPEX total-price sensors can be used for buying price; select the same entity for feed-in price when no separate export price is available.",
         "data": {
           "heating_analytics_entity": "Heating Analytics entity",
           "isolate_sensor": "Heat-pump energy sensor",
-          "nordpool_buy_entity": "Nordpool buying-price entity",
-          "nordpool_feed_in_entity": "Nordpool feed-in-price entity",
+          "nordpool_buy_entity": "Buying-price entity (Nordpool or EPEX)",
+          "nordpool_feed_in_entity": "Feed-in-price entity",
           "heat_energy_entity": "Measured slab heat energy entity (cumulative kWh)",
           "slab_temperature_entity": "Slab temperature entity",
           "room_temperature_entity": "Comfort temperature / room setpoint entity"
@@ -25,8 +25,8 @@
         "data": {
           "heating_analytics_entity": "Heating Analytics entity",
           "isolate_sensor": "Heat-pump energy sensor",
-          "nordpool_buy_entity": "Nordpool buying-price entity",
-          "nordpool_feed_in_entity": "Nordpool feed-in-price entity",
+          "nordpool_buy_entity": "Buying-price entity (Nordpool or EPEX)",
+          "nordpool_feed_in_entity": "Feed-in-price entity",
           "heat_energy_entity": "Measured slab heat energy entity (cumulative kWh)",
           "slab_temperature_entity": "Slab temperature entity",
           "room_temperature_entity": "Comfort temperature / room setpoint entity"
