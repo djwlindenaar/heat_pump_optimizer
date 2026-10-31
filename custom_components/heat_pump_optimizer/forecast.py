@@ -117,11 +117,9 @@ def _extract_prices(state, label: str) -> dict[datetime, float]:
     return result
 
 
-def _demand_from_row(row: dict, isolate_sensor: str) -> float | None:
+def _demand_from_row(row: dict) -> float | None:
+    """Return the service's demand, which already reflects isolation."""
     demand = row.get("kwh")
-    unit = (row.get("unit_breakdown") or {}).get(isolate_sensor) or {}
-    if unit.get("net_kwh") is not None:
-        demand = unit["net_kwh"]
     return float(demand) if demand is not None else None
 
 
@@ -147,7 +145,7 @@ async def async_refresh_heating_forecast(
     )
     fresh_rows = []
     for row in response.get("forecast", []):
-        demand = _demand_from_row(row, isolate_sensor)
+        demand = _demand_from_row(row)
         temp = row.get("temp")
         if demand is None or temp is None:
             continue
