@@ -470,7 +470,7 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
                 }
                 for row in schedule
             ]
-            current = local_schedule[0]
+            current = self._active_schedule_row(local_schedule)
             total_cost = sum(
                 row["interval_cost_eur"]
                 for row in local_schedule
