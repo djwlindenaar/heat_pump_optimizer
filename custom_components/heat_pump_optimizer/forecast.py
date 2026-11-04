@@ -1,12 +1,15 @@
 """Read Heating Analytics and electricity prices from Home Assistant."""
 from __future__ import annotations
 
+from collections.abc import Mapping
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 import math
 from typing import Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 
 from .heating_forecast_cache import HeatingAnalyticsForecastCache
@@ -14,6 +17,12 @@ from .optimizer import ForecastPoint
 
 INTERVAL_MINUTES = 15
 INTERVALS_PER_HOUR = 60 // INTERVAL_MINUTES
+OPEN_METEO_SOLAR_PLATFORM = "open_meteo_solar_forecast"
+OPEN_METEO_DAILY_ENERGY_SUFFIXES = (
+    "_energy_production_today",
+    "_energy_production_tomorrow",
+    *(f"_energy_production_d{day}" for day in range(2, 8)),
+)
 
 
 def _as_datetime(value: Any) -> datetime:
@@ -123,6 +132,30 @@ def _demand_from_row(row: dict) -> float | None:
     return float(demand) if demand is not None else None
 
 
+def _open_meteo_daily_entity_ids(
+    hass: HomeAssistant,
+    selected_entity_ids: list[str],
+) -> set[str]:
+    """Resolve selected Open-Meteo sensors to all daily sensors on their device."""
+    registry = er.async_get(hass)
+    entity_ids = set(selected_entity_ids)
+    for selected_entity_id in selected_entity_ids:
+        selected = registry.async_get(selected_entity_id)
+        if (
+            selected is None
+            or selected.platform != OPEN_METEO_SOLAR_PLATFORM
+            or selected.device_id is None
+        ):
+            continue
+        for sibling in er.async_entries_for_device(registry, selected.device_id):
+            if (
+                sibling.platform == OPEN_METEO_SOLAR_PLATFORM
+                and sibling.unique_id.endswith(OPEN_METEO_DAILY_ENERGY_SUFFIXES)
+            ):
+                entity_ids.add(sibling.entity_id)
+    return entity_ids
+
+
 async def async_refresh_heating_forecast(
     hass: HomeAssistant,
     cache: HeatingAnalyticsForecastCache,
@@ -225,3 +258,138 @@ def build_forecast_from_rows(
             "feed-in-price 15-minute intervals"
         )
     return points
+
+
+async def async_apply_solar_forecasts(
+    hass: HomeAssistant,
+    points: list[ForecastPoint],
+    config_entry_ids: list[str],
+    baseload_w: float,
+    open_meteo_entities: list[str] | None = None,
+    horizon_hours: int | None = None,
+) -> list[ForecastPoint]:
+    """Apply solar forecasts after accounting for household electrical load."""
+    open_meteo_entities = open_meteo_entities or []
+    if not config_entry_ids and not open_meteo_entities:
+        return points
+    if not math.isfinite(baseload_w) or baseload_w < 0:
+        raise HomeAssistantError(
+            "Solar household baseload must be a finite, non-negative number"
+        )
+
+    start = points[0].timestamp.replace(minute=0, second=0, microsecond=0)
+    end = points[-1].timestamp + timedelta(
+        hours=points[-1].duration_hours
+    )
+    forecast_end = (
+        min(
+            end,
+            points[0].timestamp + timedelta(hours=horizon_hours),
+        )
+        if horizon_hours is not None
+        else end
+    )
+    solar_periods: dict[tuple[datetime, timedelta], float] = {}
+    for config_entry_id in config_entry_ids:
+        response = await hass.services.async_call(
+            "forecast_solar",
+            "get_forecast",
+            {
+                "config_entry": config_entry_id,
+                "start": start.isoformat(),
+                "end": forecast_end.isoformat(),
+                "resolution": "hourly",
+            },
+            blocking=True,
+            return_response=True,
+        )
+        if not isinstance(response, dict) or not isinstance(
+            response.get("wh_period"), dict
+        ):
+            raise HomeAssistantError(
+                "Forecast.Solar get_forecast response must contain a "
+                "wh_period mapping"
+            )
+        for timestamp, value in response["wh_period"].items():
+            period_start = _as_datetime(timestamp).astimezone(timezone.utc)
+            energy_wh = float(value)
+            if not math.isfinite(energy_wh) or energy_wh < 0:
+                raise HomeAssistantError(
+                    "Forecast.Solar period energy must be a finite, "
+                    "non-negative number"
+                )
+            period_key = (period_start, timedelta(hours=1))
+            solar_periods[period_key] = (
+                solar_periods.get(period_key, 0.0) + energy_wh / 1000.0
+            )
+
+    selected_entity_ids = set(open_meteo_entities)
+    entity_ids = _open_meteo_daily_entity_ids(
+        hass,
+        open_meteo_entities,
+    )
+    window_start = points[0].timestamp.astimezone(timezone.utc)
+    window_end = forecast_end.astimezone(timezone.utc)
+    for entity_id in entity_ids:
+        state = hass.states.get(entity_id)
+        if state is None:
+            if entity_id in selected_entity_ids:
+                raise HomeAssistantError(
+                    f"Open-Meteo Solar Forecast entity not found: {entity_id}"
+                )
+            continue
+        wh_period_15m = state.attributes.get("wh_period_15m")
+        wh_period = state.attributes.get("wh_period")
+        if isinstance(wh_period_15m, Mapping) and wh_period_15m:
+            period_data = wh_period_15m
+            period_duration = timedelta(minutes=15)
+        elif isinstance(wh_period, Mapping) and wh_period:
+            period_data = wh_period
+            period_duration = timedelta(hours=1)
+        else:
+            if entity_id in selected_entity_ids:
+                raise HomeAssistantError(
+                    f"Open-Meteo Solar Forecast entity {entity_id} must expose "
+                    "wh_period_15m or wh_period forecast attributes"
+                )
+            continue
+        for timestamp, value in period_data.items():
+            period_start = _as_datetime(timestamp).astimezone(timezone.utc)
+            period_end = period_start + period_duration
+            if period_start >= window_end or period_end <= window_start:
+                continue
+            energy_wh = float(value)
+            if not math.isfinite(energy_wh) or energy_wh < 0:
+                raise HomeAssistantError(
+                    f"Open-Meteo Solar Forecast energy for {entity_id} must "
+                    "be a finite, non-negative number"
+                )
+            period_key = (period_start, period_duration)
+            solar_periods[period_key] = (
+                solar_periods.get(period_key, 0.0) + energy_wh / 1000.0
+            )
+
+    solar_points = []
+    for point in points:
+        interval_start = point.timestamp.astimezone(timezone.utc)
+        interval_end = interval_start + timedelta(
+            hours=point.duration_hours
+        )
+        solar_kwh = 0.0
+        for (period_start, period_duration), period_energy_kwh in (
+            solar_periods.items()
+        ):
+            overlap_start = max(interval_start, period_start)
+            overlap_end = min(
+                interval_end,
+                period_start + period_duration,
+            )
+            if overlap_end > overlap_start:
+                overlap_hours = (
+                    overlap_end - overlap_start
+                ).total_seconds() / 3600.0
+                period_hours = period_duration.total_seconds() / 3600.0
+                solar_kwh += period_energy_kwh * overlap_hours / period_hours
+        solar_kwh -= baseload_w / 1000.0 * point.duration_hours
+        solar_points.append(replace(point, pv_kwh=max(solar_kwh, 0.0)))
+    return solar_points

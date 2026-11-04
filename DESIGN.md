@@ -39,6 +39,15 @@ The result is clipped to configured slab minimum/maximum limits. This makes ener
 ## Optimizer coupling
 The persisted observed `E_state` is supplied as `initial_slab_kwh` for every optimization run. Future slab trajectories still use the COP model and Heating Analytics forecast. Thus measured history initializes the optimizer, while predictions are used only forward in time.
 
+## Solar forecast and household baseload
+One or more Forecast.Solar config entries and/or Open-Meteo Solar Forecast devices can be selected in the optimizer options. For each selected Open-Meteo device, the optimizer reads its daily energy sensors (today, tomorrow, and later days) and includes only periods overlapping the configured optimization horizon. It reads `wh_period_15m`, falling back to `wh_period`, and converts hourly forecast energies to quarter-hour optimizer intervals while preserving 15-minute data where available. Forecasts from multiple distinct arrays are summed. A fixed household baseload in watts is converted to interval energy and subtracted from the solar estimate; available PV is clipped at zero:
+
+`PV_available = max(solar_forecast_kWh - baseload_W * interval_hours / 1000, 0)`
+
+Only PV consumed by the heat pump is included in its running cost, valued at the feed-in price it could otherwise earn; any additional heat-pump electricity is valued at the buying price. Surplus PV is not credited, so the cost reflects the opportunity and grid-purchase costs of running the heat pump rather than net household energy revenue. The baseload is constant and does not model variable household consumption. When no solar forecasts are selected, the optimizer uses zero PV.
+
+`HP_cost = min(HP_electricity, PV_available) * feed_in_price + max(HP_electricity - PV_available, 0) * buy_price`
+
 ## Inputs
 - Heating Analytics forecast entity and isolated heating-energy sensor
 - Buying-price entity (Nordpool or EPEX Spot)

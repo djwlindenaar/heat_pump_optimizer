@@ -19,6 +19,16 @@ class ForecastPoint:
 def _q(value: float, step: float) -> int:
     return int(round(value / step))
 
+def running_cost(
+    electrical_kwh: float,
+    pv_kwh: float,
+    buy_price: float,
+    sell_price: float,
+) -> float:
+    pv_used_kwh = min(electrical_kwh, max(pv_kwh, 0.0))
+    grid_kwh = max(electrical_kwh - pv_used_kwh, 0.0)
+    return pv_used_kwh * sell_price + grid_kwh * buy_price
+
 def optimize(points: list[ForecastPoint], cop: COPModel, *, power_levels_w: list[int], slab_min_kwh: float, slab_max_kwh: float, initial_slab_kwh: float, terminal_reserve_kwh: float, state_step_kwh: float, startup_cost_eur: float, initially_on: bool = False) -> list[dict]:
     if not points:
         return []
@@ -38,8 +48,12 @@ def optimize(points: list[ForecastPoint], cop: COPModel, *, power_levels_w: list
                 if next_soc < slab_min_kwh - 1e-09 or next_soc > slab_max_kwh + 1e-09:
                     continue
                 new_q = max(lo, min(hi, _q(next_soc, state_step_kwh)))
-                grid = elec_kwh - point.pv_kwh
-                interval_cost = max(grid, 0) * point.buy_price + min(grid, 0) * point.sell_price
+                interval_cost = running_cost(
+                    elec_kwh,
+                    point.pv_kwh,
+                    point.buy_price,
+                    point.sell_price,
+                )
                 start = on and (not was_on)
                 total = cost + interval_cost + (startup_cost_eur if start else 0.0)
                 key = (new_q, on)

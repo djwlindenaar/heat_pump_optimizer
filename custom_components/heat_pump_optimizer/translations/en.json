@@ -38,8 +38,11 @@
     "step": {
       "init": {
         "title": "Optimizer options",
-        "description": "Tune the optimization horizon, refresh rate, slab model, allowed powers, and COP correction.",
+        "description": "Tune the optimization horizon, refresh rate, slab model, solar forecasts, allowed powers, and COP correction.",
         "data": {
+          "forecast_solar_entries": "Forecast.Solar arrays",
+          "open_meteo_solar_entities": "Open-Meteo Solar Forecast daily sensors (one per installation)",
+          "solar_baseload_w": "Fixed household baseload (W)",
           "horizon_hours": "Optimization horizon (hours)",
           "update_minutes": "Update interval (minutes)",
           "slab_min_kwh": "Minimum slab energy (kWh relative)",

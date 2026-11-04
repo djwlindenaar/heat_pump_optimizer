@@ -16,11 +16,12 @@ from .const import *
 from .cop_model import COPModel
 from .forecast import (
     INTERVAL_MINUTES,
+    async_apply_solar_forecasts,
     async_refresh_heating_forecast,
     build_forecast_from_rows,
 )
 from .heating_forecast_cache import HeatingAnalyticsForecastCache
-from .optimizer import optimize
+from .optimizer import optimize, running_cost
 from .slab_state import SlabStateEstimator
 
 _LOGGER = logging.getLogger(__name__)
@@ -325,6 +326,14 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
                 self.opts[CONF_NORDPOOL_BUY_ENTITY],
                 self.opts[CONF_NORDPOOL_FEED_IN_ENTITY],
             )
+            points = await async_apply_solar_forecasts(
+                self.hass,
+                points,
+                list(self.opts[CONF_FORECAST_SOLAR_ENTRIES]),
+                float(self.opts[CONF_SOLAR_BASELOAD_W]),
+                list(self.opts[CONF_OPEN_METEO_SOLAR_ENTITIES]),
+                horizon,
+            )
 
             levels = [
                 int(value.strip())
@@ -406,9 +415,21 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
                 if locked_row is not None
                 else None
             )
+            pv_kwh = (
+                current_point.pv_kwh
+                if current_point is not None
+                else float(locked_row.get("pv_kwh", 0.0))
+                if locked_row is not None
+                else 0.0
+            )
             current_cost = (
-                electrical_kwh * buy_price
-                if buy_price is not None
+                running_cost(
+                    electrical_kwh,
+                    pv_kwh,
+                    buy_price,
+                    sell_price,
+                )
+                if buy_price is not None and sell_price is not None
                 else None
             )
             if bootstrap and locked_power_w > 0:
@@ -428,7 +449,7 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
                 "slab_energy_kwh": round(projected_slab_kwh, 3),
                 "buy_price_eur_kwh": buy_price,
                 "sell_price_eur_kwh": sell_price,
-                "pv_kwh": 0.0,
+                "pv_kwh": round(pv_kwh, 3),
                 "interval_cost_eur": round(current_cost, 4)
                 if current_cost is not None
                 else None,

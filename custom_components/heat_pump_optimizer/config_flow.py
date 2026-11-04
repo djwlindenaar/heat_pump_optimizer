@@ -15,10 +15,43 @@ def _connection_schema(current=None):
     legacy = current.get(CONF_NORDPOOL_ENTITY, '')
     return vol.Schema({vol.Required(CONF_HEATING_ANALYTICS_ENTITY, default=current.get(CONF_HEATING_ANALYTICS_ENTITY, 'sensor.heating_analytics_week_ahead_forecast')): _es(), vol.Required(CONF_ISOLATE_SENSOR, default=current.get(CONF_ISOLATE_SENSOR, 'sensor.heating_water_energy')): _es(), vol.Required(CONF_NORDPOOL_BUY_ENTITY, default=current.get(CONF_NORDPOOL_BUY_ENTITY, legacy)): _es(), vol.Required(CONF_NORDPOOL_FEED_IN_ENTITY, default=current.get(CONF_NORDPOOL_FEED_IN_ENTITY, current.get(CONF_NORDPOOL_BUY_ENTITY, legacy))): _es(), vol.Required(CONF_HEAT_ENERGY_ENTITY, default=current.get(CONF_HEAT_ENERGY_ENTITY, '')): _es(), vol.Required(CONF_SLAB_TEMPERATURE_ENTITY, default=current.get(CONF_SLAB_TEMPERATURE_ENTITY, '')): _es(), vol.Required(CONF_ROOM_TEMPERATURE_ENTITY, default=current.get(CONF_ROOM_TEMPERATURE_ENTITY, '')): _es()})
 
-def _options_schema(current=None):
+def _options_schema(current=None, solar_options=None):
     c = {**DEFAULTS, **(current or {})}
+    solar_entries = c[CONF_FORECAST_SOLAR_ENTRIES]
+    if isinstance(solar_entries, str):
+        solar_entries = [solar_entries] if solar_entries else []
+    else:
+        solar_entries = list(solar_entries)
+    open_meteo_entities = c[CONF_OPEN_METEO_SOLAR_ENTITIES]
+    if isinstance(open_meteo_entities, str):
+        open_meteo_entities = [open_meteo_entities] if open_meteo_entities else []
+    else:
+        open_meteo_entities = list(open_meteo_entities)
     return vol.Schema(
         {
+            vol.Required(
+                CONF_FORECAST_SOLAR_ENTRIES,
+                default=solar_entries,
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=solar_options or [],
+                    multiple=True,
+                )
+            ),
+            vol.Required(
+                CONF_OPEN_METEO_SOLAR_ENTITIES,
+                default=open_meteo_entities,
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain="sensor",
+                    integration="open_meteo_solar_forecast",
+                    multiple=True,
+                )
+            ),
+            vol.Required(
+                CONF_SOLAR_BASELOAD_W,
+                default=c[CONF_SOLAR_BASELOAD_W],
+            ): vol.All(vol.Coerce(float), vol.Range(min=0)),
             vol.Required(
                 CONF_HORIZON_HOURS,
                 default=c[CONF_HORIZON_HOURS],
@@ -118,4 +151,14 @@ class HeatPumpOptimizerOptionsFlow(config_entries.OptionsFlow):
     async def async_step_init(self, user_input=None):
         if user_input is not None:
             return self.async_create_entry(title='', data=user_input)
-        return self.async_show_form(step_id='init', data_schema=_options_schema({**self._config_entry.data, **self._config_entry.options}))
+        solar_options = [
+            {"value": entry.entry_id, "label": entry.title}
+            for entry in self.hass.config_entries.async_entries("forecast_solar")
+        ]
+        return self.async_show_form(
+            step_id='init',
+            data_schema=_options_schema(
+                {**self._config_entry.data, **self._config_entry.options},
+                solar_options,
+            ),
+        )
