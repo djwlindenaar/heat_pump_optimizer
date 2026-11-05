@@ -513,9 +513,8 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
         except Exception as err:
             raise UpdateFailed(str(err)) from err
 
-    def async_set_updated_data(self, data: dict) -> None:
-        """Publish a new optimized schedule and arm its activation timer."""
-        super().async_set_updated_data(data)
+    def _async_refresh_finished(self) -> None:
+        """Arm activation after a refresh has published the optimized schedule."""
         self._schedule_next_activation()
 
     async def async_shutdown(self) -> None:
