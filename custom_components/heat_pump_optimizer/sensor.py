@@ -35,6 +35,8 @@ class TargetPowerSensor(Base):
 
 class ScheduleSensor(Base):
     _attr_name = 'Schedule'
+    # The full plan is ~70 KB; the recorder rejects attributes over 16 KB.
+    _unrecorded_attributes = frozenset({'schedule'})
 
     @property
     def unique_id(self):
