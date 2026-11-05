@@ -60,6 +60,7 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
             PLAN_STORAGE_KEY,
         )
         self._saved_schedule: list[dict] = []
+        self._saved_schedule_created: datetime | None = None
         self._plan_loaded = False
         self._loaded = False
         self._cancel_schedule_timer: Callable[[], None] | None = None
@@ -78,7 +79,12 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
         state = self.hass.states.get(self.opts[key])
         if state is None:
             raise ValueError(f"Entity not found: {self.opts[key]}")
-        return float(state.state)
+        try:
+            return float(state.state)
+        except ValueError:
+            raise ValueError(
+                f"Entity {self.opts[key]} has non-numeric state {state.state!r}"
+            ) from None
 
     def _integrated_heat_loss_kwh(
         self,
@@ -173,9 +179,17 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
             rows,
             key=lambda row: row["timestamp"],
         )
+        try:
+            self._saved_schedule_created = _as_utc(stored["created"])
+        except (KeyError, TypeError, ValueError):
+            self._saved_schedule_created = None
         self._plan_loaded = True
 
-    async def _async_save_schedule(self, schedule: list[dict]) -> None:
+    async def _async_save_schedule(
+        self,
+        schedule: list[dict],
+        created: datetime,
+    ) -> None:
         serialized = [
             {
                 **row,
@@ -183,11 +197,14 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
             }
             for row in schedule
         ]
-        await self._plan_store.async_save({"schedule": serialized})
+        await self._plan_store.async_save(
+            {"schedule": serialized, "created": created.isoformat()}
+        )
         self._saved_schedule = [
             {**row, "timestamp": _as_utc(row["timestamp"])}
             for row in schedule
         ]
+        self._saved_schedule_created = created
 
     def _schedule_row_for_quarter(
         self,
@@ -482,7 +499,7 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
             )
 
             schedule = [current_row, *schedule]
-            await self._async_save_schedule(schedule)
+            await self._async_save_schedule(schedule, now)
 
             local_schedule = [
                 {
@@ -509,9 +526,72 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
                 ),
                 "forecast_intervals": len(local_schedule),
                 "slab_state": slab,
+                "last_success": dt_util.as_local(now),
+                "last_error": None,
             }
         except Exception as err:
-            raise UpdateFailed(str(err)) from err
+            fallback = await self._async_fallback_data(err)
+            if fallback is None:
+                _LOGGER.debug("Optimization failed", exc_info=True)
+                raise UpdateFailed(str(err)) from err
+            _LOGGER.warning(
+                "Optimization failed, keeping previous schedule: %s",
+                err,
+                exc_info=True,
+            )
+            return fallback
+
+    async def _async_fallback_data(self, err: Exception) -> dict | None:
+        """Keep serving the last schedule while it still covers the current time."""
+        try:
+            await self._async_load_schedule()
+            if not self._loaded:
+                await self.estimator.async_load()
+                self._loaded = True
+            previous = self.data or {}
+            schedule = previous.get("schedule") or [
+                {**row, "timestamp": dt_util.as_local(row["timestamp"])}
+                for row in self._saved_schedule
+            ]
+            slab = previous.get("slab_state") or self.estimator.state
+            if not schedule or slab.last_update is None:
+                return None
+            now = dt_util.utcnow()
+            last = schedule[-1]
+            schedule_end = _as_utc(last["timestamp"]) + timedelta(
+                hours=float(last["duration_hours"])
+            )
+            if schedule_end <= now:
+                return None
+            current = self._active_schedule_row(schedule, now)
+        except Exception:  # noqa: BLE001 - fall back to UpdateFailed
+            _LOGGER.debug("No usable fallback schedule", exc_info=True)
+            return None
+
+        last_success = previous.get("last_success")
+        if last_success is None and self._saved_schedule_created is not None:
+            last_success = dt_util.as_local(self._saved_schedule_created)
+        return {
+            "target_power_w": current["target_electrical_power_w"],
+            "current": current,
+            "schedule": schedule,
+            "total_cost_eur": round(
+                sum(
+                    row["interval_cost_eur"]
+                    for row in schedule
+                    if row.get("interval_cost_eur") is not None
+                ),
+                4,
+            ),
+            "forecast_hours": round(
+                sum(float(row["duration_hours"]) for row in schedule),
+                2,
+            ),
+            "forecast_intervals": len(schedule),
+            "slab_state": slab,
+            "last_success": last_success,
+            "last_error": str(err),
+        }
 
     def _async_refresh_finished(self) -> None:
         """Arm activation after a refresh has published the optimized schedule."""

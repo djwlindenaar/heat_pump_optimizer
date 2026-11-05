@@ -1,5 +1,5 @@
 DOMAIN = 'heat_pump_optimizer'
-PLATFORMS = ['sensor', 'button']
+PLATFORMS = ['sensor', 'binary_sensor', 'button']
 CONF_HEATING_ANALYTICS_ENTITY = 'heating_analytics_entity'
 CONF_ISOLATE_SENSOR = 'isolate_sensor'
 CONF_NORDPOOL_BUY_ENTITY = 'nordpool_buy_entity'
