@@ -2,11 +2,13 @@
 from __future__ import annotations
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
+import logging
 import math
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 STORAGE_VERSION = 1
 STORAGE_KEY = 'heat_pump_optimizer.slab_state'
+_LOGGER = logging.getLogger(__name__)
 
 @dataclass
 class SlabState:
@@ -36,13 +38,17 @@ class SlabStateEstimator:
     async def async_save(self):
         await self._store.async_save(asdict(self.state))
 
-    async def async_update(self, *, heat_meter_kwh: float, heat_loss_kwh: float, slab_temperature_c: float, room_temperature_c: float, average_heat_loss_kw: float, slab_capacity_kwh_per_k: float, floor_transfer_kw_per_k: float, temp_filter_alpha: float, temp_correction_time_constant_hours: float, elapsed_hours: float, slab_min_kwh: float, slab_max_kwh: float) -> SlabState:
+    async def async_update(self, *, heat_meter_kwh: float, max_heat_input_kwh: float, heat_loss_kwh: float, slab_temperature_c: float, room_temperature_c: float, average_heat_loss_kw: float, slab_capacity_kwh_per_k: float, floor_transfer_kw_per_k: float, temp_filter_alpha: float, temp_correction_time_constant_hours: float, elapsed_hours: float, slab_min_kwh: float, slab_max_kwh: float) -> SlabState:
         s = self.state
         heat_in = 0.0
         if s.last_heat_meter_kwh is not None:
             delta = heat_meter_kwh - s.last_heat_meter_kwh
-            if delta >= 0:
+            if 0 <= delta <= max_heat_input_kwh:
                 heat_in = delta
+            else:
+                # Meter reset or glitch: a drop to 0 followed by recovery would
+                # otherwise count the whole meter reading as heat input.
+                _LOGGER.warning('Ignoring implausible heat meter change of %.3f kWh (max %.3f kWh); re-baselining', delta, max_heat_input_kwh)
         filtered = slab_temperature_c if s.filtered_temperature_c is None else temp_filter_alpha * slab_temperature_c + (1 - temp_filter_alpha) * s.filtered_temperature_c
         equilibrium = room_temperature_c + average_heat_loss_kw / max(floor_transfer_kw_per_k, 0.001)
         temp_reference = slab_capacity_kwh_per_k * (filtered - equilibrium)

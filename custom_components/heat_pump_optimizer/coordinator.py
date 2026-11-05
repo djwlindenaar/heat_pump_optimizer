@@ -13,7 +13,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from .const import *
-from .cop_model import COPModel
+from .cop_model import MAX_COP, COPModel
 from .forecast import (
     INTERVAL_MINUTES,
     async_apply_solar_forecasts,
@@ -86,6 +86,12 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
                 f"Entity {self.opts[key]} has non-numeric state {state.state!r}"
             ) from None
 
+    def _power_levels(self) -> list[int]:
+        return [
+            int(value.strip())
+            for value in str(self.opts[CONF_POWER_LEVELS]).split(",")
+        ]
+
     def _integrated_heat_loss_kwh(
         self,
         rows: list[dict],
@@ -142,8 +148,16 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
         average_kw = sum(float(row["kwh"]) for row in average_rows) / max(
             1, len(average_rows)
         )
+        # Most heat the pump can deliver since the last update (at least one
+        # interval, so meter resolution never trips it).
+        max_heat_input_kwh = (
+            max(self._power_levels()) / 1000.0
+            * max(elapsed_hours, INTERVAL_MINUTES / 60.0)
+            * MAX_COP
+        )
         return await self.estimator.async_update(
             heat_meter_kwh=self._sensor_float(CONF_HEAT_ENERGY_ENTITY),
+            max_heat_input_kwh=max_heat_input_kwh,
             heat_loss_kwh=heat_loss_kwh,
             slab_temperature_c=self._sensor_float(
                 CONF_SLAB_TEMPERATURE_ENTITY
@@ -352,10 +366,7 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
                 horizon,
             )
 
-            levels = [
-                int(value.strip())
-                for value in str(self.opts[CONF_POWER_LEVELS]).split(",")
-            ]
+            levels = self._power_levels()
             model = COPModel(str(self.opts[CONF_COP_CORRECTION]))
             current_point = next(
                 (

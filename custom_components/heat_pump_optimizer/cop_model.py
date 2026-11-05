@@ -3,6 +3,7 @@ from __future__ import annotations
 from bisect import bisect_right
 DATASHEET_T = [-7.0, -4.0, -2.0, 2.0, 7.0, 10.0, 15.0, 20.0]
 DATASHEET_COP = [3.61, 3.9, 4.09, 4.73, 5.24, 5.83, 6.37, 6.91]
+MAX_COP = 8.0
 
 def _interp(x, xs, ys):
     if x <= xs[0]:
@@ -38,4 +39,4 @@ class COPModel:
         if electrical_power_w <= 0:
             return 0.0
         correction = _interp(float(electrical_power_w), self.power, self.correction)
-        return max(1.0, min(8.0, self.nominal(outdoor_c) * correction))
+        return max(1.0, min(MAX_COP, self.nominal(outdoor_c) * correction))
