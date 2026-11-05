@@ -175,8 +175,6 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
                 self.opts[CONF_TEMP_CORRECTION_TIME_CONSTANT_HOURS]
             ),
             elapsed_hours=elapsed_hours,
-            slab_min_kwh=float(self.opts[CONF_SLAB_MIN]),
-            slab_max_kwh=float(self.opts[CONF_SLAB_MAX]),
         )
 
     async def _async_load_schedule(self) -> None:
@@ -421,12 +419,8 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
                 if predicted_cop is not None
                 else 0.0
             )
-            projected_slab_kwh = max(
-                float(self.opts[CONF_SLAB_MIN]),
-                min(
-                    float(self.opts[CONF_SLAB_MAX]),
-                    slab.energy_kwh + predicted_heat_kwh - heat_demand_kwh,
-                ),
+            projected_slab_kwh = (
+                slab.energy_kwh + predicted_heat_kwh - heat_demand_kwh
             )
 
             buy_price = (

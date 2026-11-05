@@ -32,10 +32,9 @@ def running_cost(
 def optimize(points: list[ForecastPoint], cop: COPModel, *, power_levels_w: list[int], slab_min_kwh: float, slab_max_kwh: float, initial_slab_kwh: float, terminal_reserve_kwh: float, state_step_kwh: float, startup_cost_eur: float, initially_on: bool = False) -> list[dict]:
     if not points:
         return []
-    lo, hi = (_q(slab_min_kwh, state_step_kwh), _q(slab_max_kwh, state_step_kwh))
-    initial_q = max(lo, min(hi, _q(initial_slab_kwh, state_step_kwh)))
-    initial_soc = max(slab_min_kwh, min(slab_max_kwh, initial_slab_kwh))
-    states = {(initial_q, initially_on): (0.0, initial_soc)}
+    # The observed initial state may lie outside the slab limits. Such a state
+    # may only move back towards the allowed range, never further away from it.
+    states = {(_q(initial_slab_kwh, state_step_kwh), initially_on): (0.0, initial_slab_kwh)}
     # Per interval: state key -> (previous state key, power_w, next_soc).
     # The winning path is reconstructed afterwards instead of copying it per state.
     back_pointers = []
@@ -53,11 +52,11 @@ def optimize(points: list[ForecastPoint], cop: COPModel, *, power_levels_w: list
             was_on = key[1]
             for power_w, on, heat_kwh, interval_cost in options:
                 next_soc = soc + heat_kwh - point.heat_demand_kwh
-                if next_soc < slab_min_kwh - 1e-09 or next_soc > slab_max_kwh + 1e-09:
+                if (next_soc < slab_min_kwh - 1e-09 and next_soc < soc) or (next_soc > slab_max_kwh + 1e-09 and next_soc > soc):
                     continue
                 start = on and (not was_on)
                 total = cost + interval_cost + (startup_cost_eur if start else 0.0)
-                new_key = (max(lo, min(hi, _q(next_soc, state_step_kwh))), on)
+                new_key = (_q(next_soc, state_step_kwh), on)
                 old = nxt.get(new_key)
                 if old is None or total < old[0]:
                     nxt[new_key] = (total, next_soc)

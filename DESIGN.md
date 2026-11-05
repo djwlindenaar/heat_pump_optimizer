@@ -34,7 +34,7 @@ The integrated state is only slowly pulled toward this reference:
 
 `E_state = E_integrated + alpha_correction*(E_temperature - E_integrated)`
 
-The result is clipped to configured slab minimum/maximum limits. This makes energy accounting dominant over short periods while preventing long-term model drift.
+This makes energy accounting dominant over short periods while preventing long-term model drift. The result is not clipped to the configured slab minimum/maximum: those limits constrain the optimizer's plan, not the observed state. When the observed state lies outside the limits, the optimizer only allows transitions that move it back towards the allowed range.
 
 ## Optimizer coupling
 The persisted observed `E_state` is supplied as `initial_slab_kwh` for every optimization run. Future slab trajectories still use the COP model and Heating Analytics forecast. Thus measured history initializes the optimizer, while predictions are used only forward in time.

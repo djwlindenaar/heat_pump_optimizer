@@ -38,7 +38,7 @@ class SlabStateEstimator:
     async def async_save(self):
         await self._store.async_save(asdict(self.state))
 
-    async def async_update(self, *, heat_meter_kwh: float, max_heat_input_kwh: float, heat_loss_kwh: float, slab_temperature_c: float, room_temperature_c: float, average_heat_loss_kw: float, slab_capacity_kwh_per_k: float, floor_transfer_kw_per_k: float, temp_filter_alpha: float, temp_correction_time_constant_hours: float, elapsed_hours: float, slab_min_kwh: float, slab_max_kwh: float) -> SlabState:
+    async def async_update(self, *, heat_meter_kwh: float, max_heat_input_kwh: float, heat_loss_kwh: float, slab_temperature_c: float, room_temperature_c: float, average_heat_loss_kw: float, slab_capacity_kwh_per_k: float, floor_transfer_kw_per_k: float, temp_filter_alpha: float, temp_correction_time_constant_hours: float, elapsed_hours: float) -> SlabState:
         s = self.state
         heat_in = 0.0
         if s.last_heat_meter_kwh is not None:
@@ -55,7 +55,8 @@ class SlabStateEstimator:
         integrated = s.energy_kwh + heat_in - heat_loss_kwh
         correction_alpha = 1.0 - math.exp(-max(elapsed_hours, 0.0) / max(temp_correction_time_constant_hours, 0.001))
         correction = correction_alpha * (temp_reference - integrated)
-        energy = max(slab_min_kwh, min(slab_max_kwh, integrated + correction))
+        # Not clipped to the slab limits: those constrain the plan, not the observed state.
+        energy = integrated + correction
         self.state = SlabState(energy_kwh=energy, last_heat_meter_kwh=heat_meter_kwh, last_update=datetime.now(timezone.utc).isoformat(), filtered_temperature_c=filtered, equilibrium_temperature_c=equilibrium, temperature_reference_energy_kwh=temp_reference, last_heat_input_kwh=heat_in, last_heat_loss_kwh=heat_loss_kwh, last_temperature_correction_kwh=correction, last_elapsed_hours=elapsed_hours, last_temperature_correction_alpha=correction_alpha)
         await self.async_save()
         return self.state
