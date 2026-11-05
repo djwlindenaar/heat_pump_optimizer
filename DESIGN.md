@@ -18,7 +18,7 @@ The heat meter is assumed to be a monotonically increasing thermal-energy sensor
 ## Temperature grounding
 The slab temperature is deliberately not used as the primary state because it is delayed/noisy. It is exponentially filtered:
 
-`T_filtered = alpha_filter*T_measured + (1-alpha_filter)*T_filtered_previous`
+`T_filtered = alpha_filter*T_measured + (1-alpha_filter)*T_filtered_previous`, with `alpha_filter = 1 - exp(-elapsed_hours / temp_filter_time_constant_hours)`, so the filter strength does not depend on the refresh interval.
 
 The storage zero point depends on the heating load. The estimated equilibrium slab temperature is:
 
@@ -59,7 +59,7 @@ Only PV consumed by the heat pump is included in its running cost, valued at the
 ## Main calibration parameters
 - `slab_capacity_kwh_per_k`, default 9.0 kWh/K
 - `floor_transfer_kw_per_k`, default 1.3 kW/K
-- `temp_filter_alpha`, default 0.10 per update
+- `temp_filter_time_constant_hours`, default 2.37 h (equivalent to the former alpha 0.10 at 15-minute updates; existing entries are migrated from their alpha and update interval)
 - `temp_correction_alpha`, default 0.01 per update
 - `equilibrium_hours`, default 24 h
 

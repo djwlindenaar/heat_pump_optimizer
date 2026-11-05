@@ -170,7 +170,9 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
             floor_transfer_kw_per_k=float(
                 self.opts[CONF_FLOOR_TRANSFER_KW_PER_K]
             ),
-            temp_filter_alpha=float(self.opts[CONF_TEMP_FILTER_ALPHA]),
+            temp_filter_time_constant_hours=float(
+                self.opts[CONF_TEMP_FILTER_TIME_CONSTANT_HOURS]
+            ),
             temp_correction_time_constant_hours=float(
                 self.opts[CONF_TEMP_CORRECTION_TIME_CONSTANT_HOURS]
             ),

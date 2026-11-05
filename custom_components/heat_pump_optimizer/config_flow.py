@@ -69,9 +69,9 @@ def _options_schema(current=None, solar_options=None):
                 default=c[CONF_FLOOR_TRANSFER_KW_PER_K],
             ): vol.All(vol.Coerce(float), vol.Range(min=0.01)),
             vol.Required(
-                CONF_TEMP_FILTER_ALPHA,
-                default=c[CONF_TEMP_FILTER_ALPHA],
-            ): vol.All(vol.Coerce(float), vol.Range(min=0, max=1)),
+                CONF_TEMP_FILTER_TIME_CONSTANT_HOURS,
+                default=c[CONF_TEMP_FILTER_TIME_CONSTANT_HOURS],
+            ): vol.All(vol.Coerce(float), vol.Range(min=0.01, max=720)),
             vol.Required(
                 CONF_TEMP_CORRECTION_TIME_CONSTANT_HOURS,
                 default=c[CONF_TEMP_CORRECTION_TIME_CONSTANT_HOURS],
@@ -123,6 +123,7 @@ def _options_schema(current=None, solar_options=None):
 
 class HeatPumpOptimizerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
+    MINOR_VERSION = 2
 
     async def async_step_user(self, user_input=None):
         if user_input is not None:

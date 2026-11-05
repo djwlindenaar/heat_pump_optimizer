@@ -56,7 +56,7 @@
           "cop_correction_curve": "COP correction curve (one power:factor pair per line)",
           "slab_capacity_kwh_per_k": "Effective slab capacity (kWh/K)",
           "floor_transfer_kw_per_k": "Floor heat transfer coefficient (kW/K)",
-          "temp_filter_alpha": "Slab temperature filter alpha",
+          "temp_filter_time_constant_hours": "Slab temperature filter time constant (hours)",
           "equilibrium_hours": "Equilibrium heat-loss averaging period (hours)",
           "temp_correction_time_constant_hours": "Temperature grounding time constant (hours)"
         }
