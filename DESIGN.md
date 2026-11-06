@@ -44,6 +44,8 @@ The COP is looked up in the `cop_table` option: the first row lists electrical p
 
 The default table was fitted to about 5,000 hours (Oct 2022 – Nov 2026) of one installation: the hourly heat-meter energy divided by the heat-pump electricity, against public hourly outdoor temperature (Open-Meteo). Only hours with the compressor running throughout, and in the hours before and after, were used, so the table describes steady running. Start-up and cycling losses, and the standby/pump consumption while the compressor is off, are not part of the COP; the start penalty covers the former. Measured data covered about −6…18 °C and 450…3,350 W; outside that range, values were extrapolated from the trend of the measured hours (grid points with little data were blended towards a temperature curve × power factor fit), so they are less reliable. Other installations should replace the table with their own data.
 
+The optional `max_heat_kw` limits the heat output: in each interval, power levels whose predicted heat (power × COP) exceeds it are left out of the search, as the heat pump could not draw that power there. With the default table and 14 kW this removes e.g. 3,500 W above about 6 °C and 3,000 W above about 12 °C. The planned power of the current quarter is projected with its heat capped at the same limit.
+
 Entries created before the table existed are migrated to a table that reproduces their former datasheet curve × correction curve.
 
 ## Solar forecast and household baseload
@@ -70,6 +72,7 @@ Only PV consumed by the heat pump is included in its running cost, valued at the
 - `temp_correction_alpha`, default 0.01 per update
 - `equilibrium_hours`, default 24 h
 - `cop_table`, see COP model
+- `max_heat_kw`, default 0 (no limit)
 
 The defaults for floor transfer and observer gains are starting values, not identified physical parameters. They should be calibrated from observed data.
 

@@ -102,6 +102,10 @@ def _options_schema(current=None, solar_options=None):
                 default=c[CONF_POWER_LEVELS],
             ): str,
             vol.Required(
+                CONF_MAX_HEAT_KW,
+                default=c[CONF_MAX_HEAT_KW],
+            ): vol.All(vol.Coerce(float), vol.Range(min=0)),
+            vol.Required(
                 CONF_STARTUP_COST,
                 default=c[CONF_STARTUP_COST],
             ): vol.Coerce(float),

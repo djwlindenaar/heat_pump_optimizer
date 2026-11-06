@@ -29,7 +29,7 @@ def running_cost(
     grid_kwh = max(electrical_kwh - pv_used_kwh, 0.0)
     return pv_used_kwh * sell_price + grid_kwh * buy_price
 
-def optimize(points: list[ForecastPoint], cop: COPModel, *, power_levels_w: list[int], slab_min_kwh: float, slab_max_kwh: float, initial_slab_kwh: float, terminal_reserve_kwh: float, state_step_kwh: float, startup_cost_eur: float, initially_on: bool = False) -> list[dict]:
+def optimize(points: list[ForecastPoint], cop: COPModel, *, power_levels_w: list[int], slab_min_kwh: float, slab_max_kwh: float, initial_slab_kwh: float, terminal_reserve_kwh: float, state_step_kwh: float, startup_cost_eur: float, initially_on: bool = False, max_heat_kw: float = 0.0) -> list[dict]:
     if not points:
         return []
     # The observed initial state may lie outside the slab limits. Such a state
@@ -44,6 +44,9 @@ def optimize(points: list[ForecastPoint], cop: COPModel, *, power_levels_w: list
         for power_w in power_levels_w:
             elec_kwh = power_w / 1000.0 * point.duration_hours
             heat_kwh = elec_kwh * cop.predict(point.outdoor_c, power_w)
+            if max_heat_kw > 0 and heat_kwh > max_heat_kw * point.duration_hours + 1e-09:
+                # Beyond the heat pump's capacity: it could not draw this power here.
+                continue
             interval_cost = running_cost(elec_kwh, point.pv_kwh, point.buy_price, point.sell_price)
             options.append((power_w, power_w > 0, heat_kwh, interval_cost))
         nxt = {}

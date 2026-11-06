@@ -421,6 +421,11 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
                 if predicted_cop is not None
                 else 0.0
             )
+            max_heat_kw = float(self.opts[CONF_MAX_HEAT_KW])
+            if max_heat_kw > 0:
+                predicted_heat_kwh = min(
+                    predicted_heat_kwh, max_heat_kw * remaining_hours
+                )
             projected_slab_kwh = (
                 slab.energy_kwh + predicted_heat_kwh - heat_demand_kwh
             )
@@ -502,6 +507,7 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
                     state_step_kwh=float(self.opts[CONF_STATE_STEP]),
                     startup_cost_eur=float(self.opts[CONF_STARTUP_COST]),
                     initially_on=locked_power_w > 0,
+                    max_heat_kw=float(self.opts[CONF_MAX_HEAT_KW]),
                 )
             )
 

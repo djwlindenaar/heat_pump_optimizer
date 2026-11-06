@@ -58,7 +58,8 @@
           "temp_filter_time_constant_hours": "Slab temperature filter time constant (hours)",
           "equilibrium_hours": "Equilibrium heat-loss averaging period (hours)",
           "temp_correction_time_constant_hours": "Temperature grounding time constant (hours)",
-          "cop_table": "COP table: first row the electrical powers (W); each further row an outdoor temperature (°C) followed by the COP at each power. Values in between are interpolated."
+          "cop_table": "COP table: first row the electrical powers (W); each further row an outdoor temperature (°C) followed by the COP at each power. Values in between are interpolated.",
+          "max_heat_kw": "Maximum heat output of the heat pump (kW, 0 = no limit); power levels whose predicted heat exceeds it are skipped"
         }
       }
     },
