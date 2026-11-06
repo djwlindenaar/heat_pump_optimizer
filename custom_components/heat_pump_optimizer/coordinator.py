@@ -367,7 +367,7 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
             )
 
             levels = self._power_levels()
-            model = COPModel(str(self.opts[CONF_COP_CORRECTION]))
+            model = COPModel(str(self.opts[CONF_COP_TABLE]))
             current_point = next(
                 (
                     point

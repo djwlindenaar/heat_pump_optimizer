@@ -38,7 +38,7 @@
     "step": {
       "init": {
         "title": "Optimizer options",
-        "description": "Tune the optimization horizon, refresh rate, slab model, solar forecasts, allowed powers, and COP correction.",
+        "description": "Tune the optimization horizon, refresh rate, slab model, solar forecasts, allowed powers, and COP table.",
         "data": {
           "forecast_solar_entries": "Forecast.Solar arrays",
           "open_meteo_solar_entities": "Open-Meteo Solar Forecast daily sensors (one per installation)",
@@ -53,12 +53,12 @@
           "startup_cost_eur": "Cost penalty per start (EUR)",
           "bootstrap_power_w": "Power to hold in current quarter when no saved plan exists (W)",
           "state_step_kwh": "Slab-state calculation step (kWh)",
-          "cop_correction_curve": "COP correction curve (one power:factor pair per line)",
           "slab_capacity_kwh_per_k": "Effective slab capacity (kWh/K)",
           "floor_transfer_kw_per_k": "Floor heat transfer coefficient (kW/K)",
           "temp_filter_time_constant_hours": "Slab temperature filter time constant (hours)",
           "equilibrium_hours": "Equilibrium heat-loss averaging period (hours)",
-          "temp_correction_time_constant_hours": "Temperature grounding time constant (hours)"
+          "temp_correction_time_constant_hours": "Temperature grounding time constant (hours)",
+          "cop_table": "COP table: first row the electrical powers (W); each further row an outdoor temperature (°C) followed by the COP at each power. Values in between are interpolated."
         }
       }
     },
@@ -67,7 +67,7 @@
       "initial_slab_out_of_range": "Initial slab energy must be between the minimum and maximum.",
       "terminal_reserve_out_of_range": "Terminal reserve must be between the minimum and maximum.",
       "invalid_power_levels": "Enter non-negative whole-number power levels separated by commas.",
-      "invalid_cop_curve": "Enter at least two positive power:factor pairs, one per line."
+      "invalid_cop_table": "Enter a header row of at least two increasing powers, then at least two rows of a temperature followed by one positive COP per power."
     }
   }
 }

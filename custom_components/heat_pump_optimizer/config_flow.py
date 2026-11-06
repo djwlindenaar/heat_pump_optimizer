@@ -6,6 +6,7 @@ from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import selector
 from .const import *
+from .cop_model import parse_cop_table
 
 def _es():
     return selector.EntitySelector(selector.EntitySelectorConfig(domain='sensor'))
@@ -113,8 +114,8 @@ def _options_schema(current=None, solar_options=None):
                 default=c[CONF_STATE_STEP],
             ): vol.Coerce(float),
             vol.Required(
-                CONF_COP_CORRECTION,
-                default=c[CONF_COP_CORRECTION],
+                CONF_COP_TABLE,
+                default=c[CONF_COP_TABLE],
             ): selector.TextSelector(
                 selector.TextSelectorConfig(multiline=True)
             ),
@@ -123,7 +124,7 @@ def _options_schema(current=None, solar_options=None):
 
 class HeatPumpOptimizerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
-    MINOR_VERSION = 2
+    MINOR_VERSION = 3
 
     async def async_step_user(self, user_input=None):
         if user_input is not None:
@@ -150,8 +151,14 @@ class HeatPumpOptimizerOptionsFlow(config_entries.OptionsFlow):
         self._config_entry = config_entry
 
     async def async_step_init(self, user_input=None):
+        errors = {}
         if user_input is not None:
-            return self.async_create_entry(title='', data=user_input)
+            try:
+                parse_cop_table(user_input[CONF_COP_TABLE])
+            except ValueError:
+                errors[CONF_COP_TABLE] = 'invalid_cop_table'
+            else:
+                return self.async_create_entry(title='', data=user_input)
         solar_options = [
             {"value": entry.entry_id, "label": entry.title}
             for entry in self.hass.config_entries.async_entries("forecast_solar")
@@ -159,7 +166,8 @@ class HeatPumpOptimizerOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id='init',
             data_schema=_options_schema(
-                {**self._config_entry.data, **self._config_entry.options},
+                {**self._config_entry.data, **self._config_entry.options, **(user_input or {})},
                 solar_options,
             ),
+            errors=errors,
         )

@@ -39,6 +39,13 @@ This makes energy accounting dominant over short periods while preventing long-t
 ## Optimizer coupling
 The persisted observed `E_state` is supplied as `initial_slab_kwh` for every optimization run. Future slab trajectories still use the COP model and Heating Analytics forecast. Thus measured history initializes the optimizer, while predictions are used only forward in time.
 
+## COP model
+The COP is looked up in the `cop_table` option: the first row lists electrical powers (W), each further row an outdoor temperature (°C) followed by the COP at each power. The optimizer interpolates bilinearly between the grid points; temperatures and powers outside the table use the nearest edge, and the result is clamped to 1–8. A full temperature × power table is used instead of a temperature curve times one power-correction curve because the power dependence changes with temperature: in mild weather the lowest powers are the most efficient, while in frost the COP hardly depends on power below about 1.5 kW.
+
+The default table was fitted to about 5,000 hours (Oct 2022 – Nov 2026) of one installation: the hourly heat-meter energy divided by the heat-pump electricity, against public hourly outdoor temperature (Open-Meteo). Only hours with the compressor running throughout, and in the hours before and after, were used, so the table describes steady running. Start-up and cycling losses, and the standby/pump consumption while the compressor is off, are not part of the COP; the start penalty covers the former. Measured data covered about −6…18 °C and 450…3,350 W; outside that range, values were extrapolated from the trend of the measured hours (grid points with little data were blended towards a temperature curve × power factor fit), so they are less reliable. Other installations should replace the table with their own data.
+
+Entries created before the table existed are migrated to a table that reproduces their former datasheet curve × correction curve.
+
 ## Solar forecast and household baseload
 One or more Forecast.Solar config entries and/or Open-Meteo Solar Forecast devices can be selected in the optimizer options. For each selected Open-Meteo device, the optimizer reads its daily energy sensors (today, tomorrow, and later days) and includes only periods overlapping the configured optimization horizon. It reads `wh_period_15m`, falling back to `wh_period`, and converts hourly forecast energies to quarter-hour optimizer intervals while preserving 15-minute data where available. Forecasts from multiple distinct arrays are summed. A fixed household baseload in watts is converted to interval energy and subtracted from the solar estimate; available PV is clipped at zero:
 
@@ -62,6 +69,7 @@ Only PV consumed by the heat pump is included in its running cost, valued at the
 - `temp_filter_time_constant_hours`, default 2.37 h (equivalent to the former alpha 0.10 at 15-minute updates; existing entries are migrated from their alpha and update interval)
 - `temp_correction_alpha`, default 0.01 per update
 - `equilibrium_hours`, default 24 h
+- `cop_table`, see COP model
 
 The defaults for floor transfer and observer gains are starting values, not identified physical parameters. They should be calibrated from observed data.
 
