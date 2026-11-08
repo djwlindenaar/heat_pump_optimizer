@@ -38,7 +38,7 @@
     "step": {
       "init": {
         "title": "Optimizer options",
-        "description": "Tune the optimization horizon, refresh rate, slab model, solar forecasts, allowed powers, and COP table.",
+        "description": "Tune the optimization horizon, refresh rate, slab model, solar forecasts, allowed powers, heat pump dynamics, and COP table.",
         "data": {
           "forecast_solar_entries": "Forecast.Solar arrays",
           "open_meteo_solar_entities": "Open-Meteo Solar Forecast daily sensors (one per installation)",
@@ -59,7 +59,15 @@
           "equilibrium_hours": "Equilibrium heat-loss averaging period (hours)",
           "temp_correction_time_constant_hours": "Temperature grounding time constant (hours)",
           "cop_table": "COP table: first row the electrical powers (W); each further row an outdoor temperature (°C) followed by the COP at each power. Values in between are interpolated.",
-          "max_heat_kw": "Maximum heat output of the heat pump (kW, 0 = no limit); power levels whose predicted heat exceeds it are skipped"
+          "max_heat_kw": "Maximum heat output of the heat pump (kW, 0 = no limit); power levels whose predicted heat exceeds it are skipped",
+          "start_profile_w": "Start-up profile: mean electrical power (W) in each quarter after a start, comma-separated, whatever the target (empty = none)",
+          "ramp_up_w_per_quarter": "Maximum rise of the mean electrical power per quarter while running (W, 0 = no limit)",
+          "ramp_down_w_per_quarter": "Maximum fall of the mean electrical power per quarter while running (W, 0 = no limit; stopping is always immediate)",
+          "electrical_power_entity": "Measured electrical power of the heat pump (W), to start the plan from what it draws now",
+          "compressor_running_entity": "Compressor running sensor, to know how long the current run has lasted",
+          "power_change_cost_eur_per_kw": "Penalty per kW change of the delivered power while running (EUR/kW)",
+          "plan_change_cost_eur_per_kw": "Penalty per kW deviation from the previous plan (EUR/kW)",
+          "plan_change_hours": "How far ahead deviations from the previous plan are penalised (hours)"
         }
       }
     },
@@ -68,7 +76,8 @@
       "initial_slab_out_of_range": "Initial slab energy must be between the minimum and maximum.",
       "terminal_reserve_out_of_range": "Terminal reserve must be between the minimum and maximum.",
       "invalid_power_levels": "Enter non-negative whole-number power levels separated by commas.",
-      "invalid_cop_table": "Enter a header row of at least two increasing powers, then at least two rows of a temperature followed by one positive COP per power."
+      "invalid_cop_table": "Enter a header row of at least two increasing powers, then at least two rows of a temperature followed by one positive COP per power.",
+      "invalid_start_profile": "Enter positive powers in W separated by commas, or leave empty."
     }
   }
 }

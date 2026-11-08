@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from functools import partial
 import logging
 from typing import Callable
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers.event import async_track_point_in_time
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -21,7 +22,7 @@ from .forecast import (
     build_forecast_from_rows,
 )
 from .heating_forecast_cache import HeatingAnalyticsForecastCache
-from .optimizer import optimize, running_cost
+from .optimizer import INTERVAL_HOURS, PlantModel, optimize, parse_start_profile, running_cost
 from .slab_state import SlabStateEstimator
 
 _LOGGER = logging.getLogger(__name__)
@@ -91,6 +92,107 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
             int(value.strip())
             for value in str(self.opts[CONF_POWER_LEVELS]).split(",")
         ]
+
+    def _plant(self) -> PlantModel:
+        return PlantModel(
+            start_profile_w=parse_start_profile(self.opts[CONF_START_PROFILE_W]),
+            ramp_up_w=float(self.opts[CONF_RAMP_UP_W]),
+            ramp_down_w=float(self.opts[CONF_RAMP_DOWN_W]),
+        )
+
+    async def _measured_plant_state(
+        self,
+        quarter_start: datetime,
+    ) -> tuple[float | None, int | None]:
+        """Mean electrical power of the previous quarter and the run age.
+
+        The run age is the number of whole quarters the compressor had been
+        running at the start of this quarter (0 when it was off). Either value
+        is None when its entity is not configured or has no usable history.
+        """
+        power_entity = self.opts.get(CONF_POWER_ENTITY) or ""
+        compressor_entity = self.opts.get(CONF_COMPRESSOR_ENTITY) or ""
+        previous_mean = None
+        if power_entity:
+            try:
+                previous_mean = await self._mean_power_w(
+                    power_entity,
+                    quarter_start - timedelta(minutes=INTERVAL_MINUTES),
+                    quarter_start,
+                )
+            except Exception:  # noqa: BLE001 - the plan falls back to the locked target
+                _LOGGER.debug("No power history for %s", power_entity, exc_info=True)
+        run_quarters = None
+        state = self.hass.states.get(compressor_entity) if compressor_entity else None
+        if state is not None and state.state in ("on", "off"):
+            if state.state == "on" and state.last_changed < quarter_start:
+                run_quarters = int(
+                    (quarter_start - state.last_changed).total_seconds()
+                    // (INTERVAL_MINUTES * 60)
+                )
+            else:
+                run_quarters = 0
+        return previous_mean, run_quarters
+
+    def _compressor_on_since(self, moment: datetime) -> bool:
+        entity = self.opts.get(CONF_COMPRESSOR_ENTITY) or ""
+        state = self.hass.states.get(entity) if entity else None
+        return state is not None and state.state == "on" and state.last_changed <= moment
+
+    def _previous_targets(
+        self,
+        previous_schedules: list[list[dict]],
+        points: list,
+        until: datetime,
+    ) -> list[int | None]:
+        """Targets of the latest previous plan for the points before until."""
+        planned: dict[datetime, int] = {}
+        for schedule in reversed(previous_schedules):
+            for row in schedule:
+                planned[_as_utc(row["timestamp"])] = int(row["target_electrical_power_w"])
+        return [
+            planned.get(_as_utc(point.timestamp)) if point.timestamp < until else None
+            for point in points
+        ]
+
+    async def _mean_power_w(
+        self,
+        entity_id: str,
+        start: datetime,
+        end: datetime,
+    ) -> float | None:
+        """Time-weighted mean of a power sensor over [start, end)."""
+        from homeassistant.components.recorder import get_instance, history
+
+        changes = await get_instance(self.hass).async_add_executor_job(
+            partial(
+                history.state_changes_during_period,
+                self.hass,
+                start,
+                end,
+                entity_id,
+                no_attributes=True,
+                include_start_time_state=True,
+            )
+        )
+        states: list[State] = changes.get(entity_id, [])
+        total = 0.0
+        covered = 0.0
+        for index, state in enumerate(states):
+            try:
+                value = float(state.state)
+            except ValueError:
+                continue
+            begin = max(state.last_changed, start)
+            finish = states[index + 1].last_changed if index + 1 < len(states) else end
+            seconds = (min(finish, end) - begin).total_seconds()
+            if seconds > 0:
+                total += value * seconds
+                covered += seconds
+        # Require most of the quarter, so a gap does not pass for the mean.
+        if covered < 0.5 * (end - start).total_seconds():
+            return None
+        return total / covered
 
     def _integrated_heat_loss_kwh(
         self,
@@ -410,12 +512,30 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
                 if current_point is not None
                 else 0.0
             )
+            # What the heat pump delivers this quarter follows from its measured
+            # state; without the sensors it is assumed to be in steady running.
+            plant = self._plant()
+            previous_power_w, run_quarters = await self._measured_plant_state(
+                quarter_start
+            )
+            if run_quarters is None:
+                was_on = locked_power_w > 0
+                run_quarters = plant.start_quarters if was_on else 0
+            else:
+                was_on = run_quarters > 0 or self._compressor_on_since(quarter_start)
+            delivered_w, run_quarters_after = plant.step(
+                was_on,
+                previous_power_w,
+                run_quarters,
+                locked_power_w,
+                INTERVAL_HOURS,
+            )
             predicted_cop = (
-                model.predict(outdoor_c, locked_power_w)
+                model.predict(outdoor_c, delivered_w)
                 if locked_power_w > 0
                 else None
             )
-            electrical_kwh = locked_power_w / 1000.0 * remaining_hours
+            electrical_kwh = delivered_w / 1000.0 * remaining_hours
             predicted_heat_kwh = (
                 electrical_kwh * predicted_cop
                 if predicted_cop is not None
@@ -470,6 +590,7 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
                 "timestamp": quarter_start,
                 "duration_hours": round(remaining_hours, 6),
                 "target_electrical_power_w": locked_power_w,
+                "expected_electrical_power_w": round(delivered_w),
                 "predicted_cop": round(predicted_cop, 3)
                 if predicted_cop is not None
                 else None,
@@ -493,6 +614,11 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
                 selected_points.append(point)
                 selected_hours += point.duration_hours
 
+            previous_targets = self._previous_targets(
+                previous_schedules,
+                selected_points,
+                now + timedelta(hours=float(self.opts[CONF_PLAN_CHANGE_HOURS])),
+            )
             schedule = await self.hass.async_add_executor_job(
                 lambda: optimize(
                     selected_points,
@@ -508,6 +634,16 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
                     startup_cost_eur=float(self.opts[CONF_STARTUP_COST]),
                     initially_on=locked_power_w > 0,
                     max_heat_kw=float(self.opts[CONF_MAX_HEAT_KW]),
+                    plant=plant,
+                    initial_delivered_w=delivered_w,
+                    initial_run_quarters=run_quarters_after,
+                    power_change_cost_eur_per_kw=float(
+                        self.opts[CONF_POWER_CHANGE_COST]
+                    ),
+                    previous_targets_w=previous_targets,
+                    plan_change_cost_eur_per_kw=float(
+                        self.opts[CONF_PLAN_CHANGE_COST]
+                    ),
                 )
             )
 

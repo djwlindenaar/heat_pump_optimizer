@@ -12,13 +12,14 @@ A Home Assistant custom integration that optimizes a power-controlled heat pump 
 - Slab temperature
 - Comfort-temperature or room-setpoint entity
 - Configurable electrical power levels and COP table (outdoor temperature × electrical power)
+- Optional heat-pump electrical power and compressor-running sensors, used with the configurable start-up profile and ramp rates
 
 ### Operation
 The persistent slab observer is updated from measured delivered heat, elapsed-time-integrated Heating Analytics demand, and slow temperature grounding. The current quarter's already-issued power is held fixed and projected to the next quarter boundary; optimization decisions begin at that boundary. A timed coordinator callback activates each later target at its timestamp.
 
 ### Outputs
 - Target electrical power
-- Quarter-hour schedule
+- Quarter-hour schedule, with per interval the target and the power the heat pump is expected to draw
 - Forecast optimized cost
 - Estimated slab energy and observer diagnostics
 - Filtered slab temperature, equilibrium temperature, and temperature-reference energy

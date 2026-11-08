@@ -48,6 +48,26 @@ The optional `max_heat_kw` limits the heat output: in each interval, power level
 
 Entries created before the table existed are migrated to a table that reproduces their former datasheet curve × correction curve.
 
+## Heat pump dynamics
+The heat pump does not jump to a new power. The optimizer therefore separates the **target** (what the controller is asked for, `target_electrical_power_w`) from the **expected power** (the mean power the heat pump is predicted to draw in the interval, `expected_electrical_power_w`). Heat, COP, cost and slab energy are calculated from the expected power; the target is the decision.
+
+The plant model (`PlantModel` in `optimizer.py`) gives the expected power of an interval from the previous interval's expected power, the run age and the target:
+
+- Target 0: the heat pump stops within the interval (0 W).
+- Start-up: in the n-th quarter after a start the mean power is `start_profile_w[n]`, whatever the target. The LG runs its own start-up: measured means were about 1.1 kW in the first quarter and 1.5 kW in the second, also for targets of 500–1000 W (Oct–Nov 2026).
+- Running: the power moves towards the target by at most `ramp_up_w_per_quarter` up or `ramp_down_w_per_quarter` down per quarter (scaled for shorter intervals; 0 = no limit). Measured: about +1,000 W per quarter up (ES5 and boost), and 300–700 W per quarter down.
+
+The DP state is (slab energy, on, expected power, run age). Expected power is part of the state only when the next interval depends on it (a ramp limit or the change penalty is set); its key resolution is 250 W, while the value itself is carried exactly. Several targets can lead to the same expected power when a ramp limit binds; the one closest to the expected power is chosen, so a large step down is planned as a staircase. During the start-up the target has no effect, so the plan asks for the power the run continues at. With an empty start profile and no ramp limits the optimizer reduces to the instantaneous model.
+
+The current quarter starts from the measured state: the mean of `electrical_power_entity` over the previous quarter and the run age from `compressor_running_entity` (whole quarters since it turned on). Without these sensors the heat pump is assumed to be running steadily at the locked target. The expected power of the current quarter is the starting point of the optimization.
+
+Two penalties keep the plan from flipping between almost equal options, which the heat pump cannot follow:
+
+- `power_change_cost_eur_per_kw` per kW of change of the expected power while running (starts are covered by the start penalty, stops are free).
+- `plan_change_cost_eur_per_kw` per kW that a target deviates from the previous plan, for intervals within `plan_change_hours`.
+
+The penalties steer the search but are not part of the reported interval cost.
+
 ## Solar forecast and household baseload
 One or more Forecast.Solar config entries and/or Open-Meteo Solar Forecast devices can be selected in the optimizer options. For each selected Open-Meteo device, the optimizer reads its daily energy sensors (today, tomorrow, and later days) and includes only periods overlapping the configured optimization horizon. It reads `wh_period_15m`, falling back to `wh_period`, and converts hourly forecast energies to quarter-hour optimizer intervals while preserving 15-minute data where available. Forecasts from multiple distinct arrays are summed. A fixed household baseload in watts is converted to interval energy and subtracted from the solar estimate; available PV is clipped at zero:
 
@@ -64,6 +84,7 @@ Only PV consumed by the heat pump is included in its running cost, valued at the
 - Cumulative measured thermal energy delivered to the slab, kWh
 - Slab temperature sensor, °C
 - Room temperature sensor, °C
+- Optional: heat-pump electrical power (W) and compressor-running sensor, for the measured starting state
 
 ## Main calibration parameters
 - `slab_capacity_kwh_per_k`, default 9.0 kWh/K
@@ -73,6 +94,9 @@ Only PV consumed by the heat pump is included in its running cost, valued at the
 - `equilibrium_hours`, default 24 h
 - `cop_table`, see COP model
 - `max_heat_kw`, default 0 (no limit)
+- `start_profile_w`, default `1100,1500`
+- `ramp_up_w_per_quarter`, default 1000 W; `ramp_down_w_per_quarter`, default 600 W
+- `power_change_cost_eur_per_kw`, default 0.005 EUR/kW; `plan_change_cost_eur_per_kw`, default 0.01 EUR/kW within `plan_change_hours`, default 1 h
 
 The defaults for floor transfer and observer gains are starting values, not identified physical parameters. They should be calibrated from observed data.
 

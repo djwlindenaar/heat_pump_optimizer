@@ -7,6 +7,7 @@ from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import selector
 from .const import *
 from .cop_model import parse_cop_table
+from .optimizer import parse_start_profile
 
 def _es():
     return selector.EntitySelector(selector.EntitySelectorConfig(domain='sensor'))
@@ -106,6 +107,40 @@ def _options_schema(current=None, solar_options=None):
                 default=c[CONF_MAX_HEAT_KW],
             ): vol.All(vol.Coerce(float), vol.Range(min=0)),
             vol.Required(
+                CONF_START_PROFILE_W,
+                default=c[CONF_START_PROFILE_W],
+            ): str,
+            vol.Required(
+                CONF_RAMP_UP_W,
+                default=c[CONF_RAMP_UP_W],
+            ): vol.All(vol.Coerce(float), vol.Range(min=0)),
+            vol.Required(
+                CONF_RAMP_DOWN_W,
+                default=c[CONF_RAMP_DOWN_W],
+            ): vol.All(vol.Coerce(float), vol.Range(min=0)),
+            vol.Optional(
+                CONF_POWER_ENTITY,
+                description={"suggested_value": c[CONF_POWER_ENTITY] or None},
+            ): _es(),
+            vol.Optional(
+                CONF_COMPRESSOR_ENTITY,
+                description={"suggested_value": c[CONF_COMPRESSOR_ENTITY] or None},
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="binary_sensor")
+            ),
+            vol.Required(
+                CONF_POWER_CHANGE_COST,
+                default=c[CONF_POWER_CHANGE_COST],
+            ): vol.All(vol.Coerce(float), vol.Range(min=0)),
+            vol.Required(
+                CONF_PLAN_CHANGE_COST,
+                default=c[CONF_PLAN_CHANGE_COST],
+            ): vol.All(vol.Coerce(float), vol.Range(min=0)),
+            vol.Required(
+                CONF_PLAN_CHANGE_HOURS,
+                default=c[CONF_PLAN_CHANGE_HOURS],
+            ): vol.All(vol.Coerce(float), vol.Range(min=0)),
+            vol.Required(
                 CONF_STARTUP_COST,
                 default=c[CONF_STARTUP_COST],
             ): vol.Coerce(float),
@@ -161,7 +196,11 @@ class HeatPumpOptimizerOptionsFlow(config_entries.OptionsFlow):
                 parse_cop_table(user_input[CONF_COP_TABLE])
             except ValueError:
                 errors[CONF_COP_TABLE] = 'invalid_cop_table'
-            else:
+            try:
+                parse_start_profile(user_input[CONF_START_PROFILE_W])
+            except ValueError:
+                errors[CONF_START_PROFILE_W] = 'invalid_start_profile'
+            if not errors:
                 return self.async_create_entry(title='', data=user_input)
         solar_options = [
             {"value": entry.entry_id, "label": entry.title}
