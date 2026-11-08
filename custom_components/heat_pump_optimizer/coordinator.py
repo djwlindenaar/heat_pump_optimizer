@@ -103,12 +103,14 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
     async def _measured_plant_state(
         self,
         quarter_start: datetime,
-    ) -> tuple[float | None, int | None]:
-        """Mean electrical power of the previous quarter and the run age.
+        start_quarters: int,
+    ) -> tuple[float | None, bool | None, int | None]:
+        """Mean electrical power of the previous quarter, and whether the
+        compressor was running at the start of this quarter and for how many
+        whole quarters (counted up to start_quarters + 1).
 
-        The run age is the number of whole quarters the compressor had been
-        running at the start of this quarter (0 when it was off). Either value
-        is None when its entity is not configured or has no usable history.
+        Values are None when their entity is not configured or has no usable
+        history.
         """
         power_entity = self.opts.get(CONF_POWER_ENTITY) or ""
         compressor_entity = self.opts.get(CONF_COMPRESSOR_ENTITY) or ""
@@ -122,22 +124,73 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
                 )
             except Exception:  # noqa: BLE001 - the plan falls back to the locked target
                 _LOGGER.debug("No power history for %s", power_entity, exc_info=True)
-        run_quarters = None
-        state = self.hass.states.get(compressor_entity) if compressor_entity else None
-        if state is not None and state.state in ("on", "off"):
-            if state.state == "on" and state.last_changed < quarter_start:
-                run_quarters = int(
-                    (quarter_start - state.last_changed).total_seconds()
-                    // (INTERVAL_MINUTES * 60)
+        was_on = run_quarters = None
+        if compressor_entity:
+            try:
+                was_on, run_quarters = await self._run_age(
+                    compressor_entity, quarter_start, start_quarters + 1
                 )
-            else:
-                run_quarters = 0
-        return previous_mean, run_quarters
+            except Exception:  # noqa: BLE001 - the plan falls back to steady running
+                _LOGGER.debug("No history for %s", compressor_entity, exc_info=True)
+        return previous_mean, was_on, run_quarters
 
-    def _compressor_on_since(self, moment: datetime) -> bool:
-        entity = self.opts.get(CONF_COMPRESSOR_ENTITY) or ""
-        state = self.hass.states.get(entity) if entity else None
-        return state is not None and state.state == "on" and state.last_changed <= moment
+    async def _history(
+        self,
+        entity_id: str,
+        start: datetime,
+        end: datetime,
+    ) -> list[State]:
+        from homeassistant.components.recorder import get_instance, history
+
+        changes = await get_instance(self.hass).async_add_executor_job(
+            partial(
+                history.state_changes_during_period,
+                self.hass,
+                start,
+                end,
+                entity_id,
+                no_attributes=True,
+                include_start_time_state=True,
+            )
+        )
+        return changes.get(entity_id, [])
+
+    async def _run_age(
+        self,
+        entity_id: str,
+        moment: datetime,
+        max_quarters: int,
+    ) -> tuple[bool | None, int | None]:
+        """Whether the compressor ran at moment, and for how many whole quarters.
+
+        Taken from the recorded history rather than last_changed, which a Home
+        Assistant restart resets. Unavailable/unknown states do not end a run.
+        """
+        window_start = moment - timedelta(minutes=INTERVAL_MINUTES * max_quarters)
+        states = [
+            state
+            for state in await self._history(entity_id, window_start, moment)
+            if state.state in ("on", "off") and state.last_changed <= moment
+        ]
+        if not states:
+            return None, None
+        if states[-1].state != "on":
+            return False, 0
+        run_start = None
+        for previous, state in zip(states, states[1:]):
+            if previous.state == "off" and state.state == "on":
+                run_start = state.last_changed
+        if run_start is None:
+            # On throughout the window (or since its first recorded state).
+            if states[0].state == "on" and states[0].last_changed <= window_start:
+                return True, max_quarters
+            run_start = max(states[0].last_changed, window_start)
+            if states[0].state == "off":
+                return True, 0
+        return True, min(
+            max_quarters,
+            int((moment - run_start).total_seconds() // (INTERVAL_MINUTES * 60)),
+        )
 
     def _previous_targets(
         self,
@@ -162,20 +215,7 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
         end: datetime,
     ) -> float | None:
         """Time-weighted mean of a power sensor over [start, end)."""
-        from homeassistant.components.recorder import get_instance, history
-
-        changes = await get_instance(self.hass).async_add_executor_job(
-            partial(
-                history.state_changes_during_period,
-                self.hass,
-                start,
-                end,
-                entity_id,
-                no_attributes=True,
-                include_start_time_state=True,
-            )
-        )
-        states: list[State] = changes.get(entity_id, [])
+        states = await self._history(entity_id, start, end)
         total = 0.0
         covered = 0.0
         for index, state in enumerate(states):
@@ -515,14 +555,12 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
             # What the heat pump delivers this quarter follows from its measured
             # state; without the sensors it is assumed to be in steady running.
             plant = self._plant()
-            previous_power_w, run_quarters = await self._measured_plant_state(
-                quarter_start
+            previous_power_w, was_on, run_quarters = await self._measured_plant_state(
+                quarter_start, plant.start_quarters
             )
-            if run_quarters is None:
+            if was_on is None:
                 was_on = locked_power_w > 0
                 run_quarters = plant.start_quarters if was_on else 0
-            else:
-                was_on = run_quarters > 0 or self._compressor_on_since(quarter_start)
             delivered_w, run_quarters_after = plant.step(
                 was_on,
                 previous_power_w,
