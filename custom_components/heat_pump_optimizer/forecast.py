@@ -10,6 +10,7 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util import dt as dt_util
 
 from .heating_forecast_cache import HeatingAnalyticsForecastCache
@@ -18,6 +19,8 @@ from .optimizer import ForecastPoint
 INTERVAL_MINUTES = 15
 INTERVALS_PER_HOUR = 60 // INTERVAL_MINUTES
 OPEN_METEO_SOLAR_PLATFORM = "open_meteo_solar_forecast"
+OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+OPEN_METEO_TIMEOUT_SECONDS = 30
 OPEN_METEO_DAILY_ENERGY_SUFFIXES = (
     "_energy_production_today",
     "_energy_production_tomorrow",
@@ -258,6 +261,58 @@ def build_forecast_from_rows(
             "feed-in-price 15-minute intervals"
         )
     return points
+
+
+async def async_fetch_outdoor_temperatures(
+    hass: HomeAssistant,
+    days: int,
+) -> dict[datetime, float]:
+    """Outdoor temperature per quarter from Open-Meteo's 15-minute forecast.
+
+    Open-Meteo gives the instantaneous temperature at each quarter boundary; a
+    quarter gets the mean of its start and end value.
+    """
+    session = async_get_clientsession(hass)
+    params = {
+        "latitude": round(hass.config.latitude, 2),
+        "longitude": round(hass.config.longitude, 2),
+        "minutely_15": "temperature_2m",
+        "forecast_days": min(16, days + 1),
+        "timezone": "UTC",
+    }
+    async with session.get(
+        OPEN_METEO_FORECAST_URL,
+        params=params,
+        timeout=OPEN_METEO_TIMEOUT_SECONDS,
+        raise_for_status=True,
+    ) as response:
+        data = await response.json()
+    series = data["minutely_15"]
+    times = [
+        datetime.fromisoformat(value).replace(tzinfo=timezone.utc)
+        for value in series["time"]
+    ]
+    values = series["temperature_2m"]
+    temperatures = {}
+    for start, end, start_c, end_c in zip(times, times[1:], values, values[1:]):
+        if start_c is not None and end_c is not None:
+            temperatures[start] = (float(start_c) + float(end_c)) / 2.0
+    if not temperatures:
+        raise ValueError("Open-Meteo returned no 15-minute temperatures")
+    return temperatures
+
+
+def apply_outdoor_temperatures(
+    points: list[ForecastPoint],
+    temperatures: Mapping[datetime, float],
+) -> list[ForecastPoint]:
+    """Use the given quarter temperatures; quarters without one keep the hourly value."""
+    return [
+        replace(point, outdoor_c=temperatures[point.timestamp])
+        if point.timestamp in temperatures
+        else point
+        for point in points
+    ]
 
 
 async def async_apply_solar_forecasts(

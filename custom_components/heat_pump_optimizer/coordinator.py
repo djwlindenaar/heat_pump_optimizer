@@ -17,7 +17,9 @@ from .const import *
 from .cop_model import MAX_COP, COPModel
 from .forecast import (
     INTERVAL_MINUTES,
+    apply_outdoor_temperatures,
     async_apply_solar_forecasts,
+    async_fetch_outdoor_temperatures,
     async_refresh_heating_forecast,
     build_forecast_from_rows,
 )
@@ -65,6 +67,8 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
         self._plan_loaded = False
         self._loaded = False
         self._cancel_schedule_timer: Callable[[], None] | None = None
+        # Last good Open-Meteo quarter temperatures, kept for when a fetch fails.
+        self._outdoor_temperatures: dict[datetime, float] = {}
 
         super().__init__(
             hass,
@@ -508,6 +512,22 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
                 horizon,
             )
 
+            # The COP uses Open-Meteo's 15-minute temperatures (the COP table was
+            # fitted to Open-Meteo); heat demand keeps Heating Analytics' forecast.
+            try:
+                self._outdoor_temperatures = await async_fetch_outdoor_temperatures(
+                    self.hass, days
+                )
+            except Exception as err:  # noqa: BLE001 - any failure falls back
+                _LOGGER.warning(
+                    "Open-Meteo temperature forecast unavailable, using %s: %s",
+                    "the previous one"
+                    if self._outdoor_temperatures
+                    else "Heating Analytics' hourly temperatures",
+                    err,
+                )
+            points = apply_outdoor_temperatures(points, self._outdoor_temperatures)
+
             levels = self._power_levels()
             model = COPModel(str(self.opts[CONF_COP_TABLE]))
             current_point = next(
@@ -537,7 +557,9 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
                 None,
             )
             outdoor_c = (
-                float(heat_row["temp"])
+                self._outdoor_temperatures[quarter_start]
+                if quarter_start in self._outdoor_temperatures
+                else float(heat_row["temp"])
                 if heat_row is not None
                 else current_point.outdoor_c
                 if current_point is not None
@@ -638,6 +660,7 @@ class HeatPumpOptimizerCoordinator(DataUpdateCoordinator[dict]):
                 "buy_price_eur_kwh": buy_price,
                 "sell_price_eur_kwh": sell_price,
                 "pv_kwh": round(pv_kwh, 3),
+                "outdoor_c": round(outdoor_c, 1),
                 "interval_cost_eur": round(current_cost, 4)
                 if current_cost is not None
                 else None,

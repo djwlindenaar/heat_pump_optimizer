@@ -183,7 +183,7 @@ def optimize(points: list[ForecastPoint], cop: COPModel, *, power_levels_w: list
         cop_v = cop.predict(point.outdoor_c, delivered_w)
         heat_kwh = elec_kwh * cop_v
         interval_cost = running_cost(elec_kwh, point.pv_kwh, point.buy_price, point.sell_price)
-        path.append({'timestamp': point.timestamp, 'duration_hours': round(point.duration_hours, 6), 'target_electrical_power_w': power_w, 'expected_electrical_power_w': round(delivered_w), 'predicted_cop': round(cop_v, 3) if on else None, 'predicted_heat_kwh': round(heat_kwh, 3), 'heat_demand_kwh': round(point.heat_demand_kwh, 3), 'slab_energy_kwh': round(next_soc, 3), 'buy_price_eur_kwh': point.buy_price, 'sell_price_eur_kwh': point.sell_price, 'pv_kwh': point.pv_kwh, 'interval_cost_eur': round(interval_cost + (startup_cost_eur if start else 0), 4), '_in_start': on and (start or prev_plant[2] < plant.start_quarters)})
+        path.append({'timestamp': point.timestamp, 'duration_hours': round(point.duration_hours, 6), 'target_electrical_power_w': power_w, 'expected_electrical_power_w': round(delivered_w), 'predicted_cop': round(cop_v, 3) if on else None, 'predicted_heat_kwh': round(heat_kwh, 3), 'heat_demand_kwh': round(point.heat_demand_kwh, 3), 'slab_energy_kwh': round(next_soc, 3), 'buy_price_eur_kwh': point.buy_price, 'sell_price_eur_kwh': point.sell_price, 'pv_kwh': point.pv_kwh, 'outdoor_c': round(point.outdoor_c, 1), 'interval_cost_eur': round(interval_cost + (startup_cost_eur if start else 0), 4), '_in_start': on and (start or prev_plant[2] < plant.start_quarters)})
         plant_state, soc_key = prev_plant, prev_soc_key
     path.reverse()
     # During the start-up the target does not change what is delivered. Ask for

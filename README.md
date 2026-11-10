@@ -12,6 +12,7 @@ A Home Assistant custom integration that optimizes a power-controlled heat pump 
 - Slab temperature
 - Comfort-temperature or room-setpoint entity
 - Configurable electrical power levels and COP table (outdoor temperature × electrical power)
+- Open-Meteo 15-minute outdoor temperature forecast for the COP (internet access needed; falls back to Heating Analytics' hourly temperature)
 - Optional heat-pump electrical power and compressor-running sensors, used with the configurable start-up profile and ramp rates
 
 ### Operation
